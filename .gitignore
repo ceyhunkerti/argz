@@ -1,0 +1,4 @@
+.vscode
+.uncommitted
+zig-out
+zig-cache
