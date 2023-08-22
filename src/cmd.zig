@@ -5,9 +5,9 @@ const Token = @import("./token.zig").Token;
 const hooks = @import("./hooks.zig");
 const utils = @import("./utils.zig");
 
+const testing = std.testing;
 const Hooks = hooks.Hooks;
 const Hook = hooks.Hook;
-const testing = std.testing;
 const Option = opt.Option;
 
 pub const Error = error{
