@@ -10,9 +10,30 @@ Supports:
 - hooks for attaching user functions to specified locations.
 
 
-Examples:
+## Options
+
+You can specify number of options and attach those options to the command you want. Options are only valid
+in the scope of the attached command.
+
+See [examples/options.zig](./examples/options.zig) for example usage.
+
+## Arguments
+
+Arguments are just strings and can be limited by using the `nargs` parameter.
+```zig
+// *    : zero or more arguments
+// n    : exacly n arguments. n is an unsigned interger
+// n..  : n or more arguments.
+// ..n  : up to n arguments, inclusive
+// n..m : between n and m arguments, inclusive. m is and unsigned integer
+// null : (default) same as zero arguments
+```
+See [examples/arguments.zig](./examples/options.zig) for example usage.
+
 
 ## Subcommands
+
+You can add as many subcommands as you like. It's a tree like structure so you can nest any number of subcommands.
 
 ```zig
 //demo.zig
@@ -52,3 +73,11 @@ pub fn main() !void {
 $ <appname> my-sub-command
 # will print  @my-sub-command running subcommand
 ```
+
+
+## Help
+
+To access help, add `-h` or `--help` option. This will print the attached help for the current command.
+
+See [examples/help.zig](./examples/help.zig)
+

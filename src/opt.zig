@@ -108,7 +108,7 @@ pub const Option = struct {
     }
 
     pub fn boolValue(self: Self) ?bool {
-        if (self.value) |v| return v;
+        if (self.value) |v| return v.boolean;
         return null;
     }
 

@@ -166,6 +166,11 @@ pub const Command = struct {
         }
     }
 
+    pub fn parseAndStart(self: *Self) !void {
+        try self.parse();
+        try self.start();
+    }
+
     pub fn reset(self: *Self) void {
         self.n_args = null;
         self.active = false;
