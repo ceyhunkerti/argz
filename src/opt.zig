@@ -243,7 +243,7 @@ test "Option.compute optional int with default" {
         .default = "10",
     };
     try o.compute();
-    try testing.expectEqual(o.value.?.int, 10);
+    try testing.expectEqual(o.intValue().?, 10);
 }
 
 test "Option.compute optional string with default" {
@@ -254,7 +254,7 @@ test "Option.compute optional string with default" {
         .default = "10",
     };
     try o.compute();
-    try testing.expectEqualStrings(o.value.?.string, "10");
+    try testing.expectEqualStrings(o.stringValue().?, "10");
 }
 
 test "Option.compute optional boolean with default" {
@@ -265,7 +265,7 @@ test "Option.compute optional boolean with default" {
         .default = "true",
     };
     try o.compute();
-    try testing.expectEqual(o.value.?.boolean, true);
+    try testing.expectEqual(o.boolValue().?, true);
 }
 
 test "Option.compute flag" {
@@ -275,7 +275,7 @@ test "Option.compute flag" {
         .str = "true",
     };
     try o.compute();
-    try testing.expectEqual(o.value.?.boolean, true);
+    try testing.expectEqual(o.boolValue().?, true);
 }
 
 test "Option.compute flag default" {
