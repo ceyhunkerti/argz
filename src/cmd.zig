@@ -57,6 +57,33 @@ pub fn validate(command: Command) anyerror!void {
     if (command.commands) |subs| for (subs.items) |sub| if (sub.validate) |vl| try vl(sub);
 }
 
+fn buildUsage(c: Command) ![]const u8 {
+    var cmd_path = std.ArrayList([]const u8).init(c.allocator);
+    defer cmd_path.deinit();
+    try cmd_path.append(c.name);
+    var parent = c.parent;
+
+    while (parent) |p| {
+        try cmd_path.append(p.name);
+        parent = p.parent;
+    }
+
+    var usage = std.ArrayList([]const u8).init(c.allocator);
+    defer usage.deinit();
+    try usage.append("Usage:");
+
+    var i: usize = 0;
+    while (i != cmd_path.items.len) {
+        try usage.append(cmd_path.items[cmd_path.items.len - 1 - i]);
+        i += 1;
+    }
+    if (c.n_args) |n| if (n.upper != 0) try usage.append("[arguments]");
+    if (c.options) |_| try usage.append("[options]");
+    if (c.commands) |_| try usage.append("[commands]");
+
+    return try std.mem.join(c.allocator, " ", usage.items);
+}
+
 pub fn help(self: Command) ![]const u8 {
     var buffer = std.ArrayList([]const u8).init(self.allocator);
     defer {
@@ -66,16 +93,8 @@ pub fn help(self: Command) ![]const u8 {
         buffer.deinit();
     }
 
-    var usage = std.ArrayList([]const u8).init(self.allocator);
-    defer usage.deinit();
-    var u = try std.fmt.allocPrint(self.allocator, "Usage: {s}", .{self.name});
-    defer self.allocator.free(u);
-    try usage.append(u);
-    if (self.n_args) |n| if (n.upper != 0) try usage.append("[arguments]");
-    if (self.options) |_| try usage.append("[options]");
-    if (self.commands) |_| try usage.append("[commands]");
-
-    try buffer.append(try std.mem.join(self.allocator, " ", usage.items));
+    var usage = try buildUsage(self);
+    try buffer.append(usage);
     try buffer.append(
         try std.fmt.allocPrint(self.allocator, "\n{s}", .{self.desc()}),
     );
@@ -258,7 +277,8 @@ pub const Command = struct {
         self.commands = self.commands orelse std.ArrayList(Self).init(self.allocator);
         var c = command;
         c.root = false;
-        try self.commands.?.append(command);
+        c.parent = self;
+        try self.commands.?.append(c);
     }
 
     pub fn getActiveCommand(self: Self) ?*Self {
@@ -689,6 +709,19 @@ test "Command.parse with subcommands" {
     root.getCommand("sub").?.nargs = "*";
     try root.parseSlice(&.{ "sub", "-ac", "arg", "arg" });
     try testing.expectEqual(sub.options.?.items[1].value.?.boolean, false);
+}
+
+test "buildUsage" {
+    var c = Command.init(testing.allocator, "root");
+    defer c.deinit();
+    var h1 = try help(c);
+    defer testing.allocator.free(h1);
+    try testing.expectEqualStrings("Usage: root\n\n", h1);
+    var sub = Command.init(testing.allocator, "sub");
+    try c.addCommand(sub);
+    var h2 = try help(c.getCommand("sub").?.*);
+    defer testing.allocator.free(h2);
+    try testing.expectEqualStrings("Usage: root sub\n\n", h2);
 }
 
 test "Command.help" {
