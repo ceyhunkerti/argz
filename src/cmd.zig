@@ -61,20 +61,16 @@ fn buildUsage(c: Command) ![]const u8 {
     try cmd_path.append(c.name);
     var parent = c.parent;
 
-    while (parent) |p| {
-        try cmd_path.append(p.name);
-        parent = p.parent;
-    }
+    while (parent) |p| : (parent = p.parent) try cmd_path.append(p.name);
 
     var usage = std.ArrayList([]const u8).init(c.allocator);
     defer usage.deinit();
     try usage.append("Usage:");
 
     var i: usize = 0;
-    while (i != cmd_path.items.len) {
+    while (i != cmd_path.items.len) : (i += 1)
         try usage.append(cmd_path.items[cmd_path.items.len - 1 - i]);
-        i += 1;
-    }
+
     if (c.n_args) |n| if (n.upper != 0) try usage.append("[arguments]");
     if (c.options) |_| try usage.append("[options]");
     if (c.commands) |_| try usage.append("[commands]");
@@ -402,10 +398,7 @@ pub const Command = struct {
             if (token.isHelp()) {
                 self.seek_help = true;
                 var p: ?*Self = self.parent;
-                while (p != null) {
-                    p.?.seek_help = true;
-                    p = p.?.parent;
-                }
+                while (p != null) : (p = p.?.parent) p.?.seek_help = true;
                 return;
             }
 
