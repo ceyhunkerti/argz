@@ -4,6 +4,7 @@ Supports:
 
 - subcommands `app sub1 sub2`
 - input options for primitive types `string` `integer` `boolean`
+- Chained options for boolean types `-abc` is same as `-a -b -c`
 - flags for on/off behavior types
 - argument specification with rules eg. `1..3`
 - builtin and customizable help system
