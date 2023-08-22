@@ -40,9 +40,9 @@ fn run_wrapper(self: *Command) anyerror!void {
 }
 
 fn validateArgs(command: Command) anyerror!void {
-    var al = if (command.args) |a| a.items.len else 0;
+    const al = if (command.args) |a| a.items.len else 0;
 
-    var n = command.n_args orelse return Error.ParseError;
+    const n = command.n_args orelse return Error.ParseError;
 
     if (al < (n.lower orelse 0)) return Error.NotEnoughArguments;
     if (n.upper != null and n.upper.? < al) return Error.ArgumentCountOverflow;
