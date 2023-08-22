@@ -140,9 +140,7 @@ pub const Option = struct {
     // validations
 
     pub fn validateRequired(self: Self) !void {
-        if (self.required and self.default != null) {
-            return Error.InvalidParameters;
-        }
+        if (self.required and self.default != null) return Error.InvalidParameters;
     }
 
     pub fn validateNames(self: Self) !void {
