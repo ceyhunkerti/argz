@@ -399,7 +399,6 @@ pub const Command = struct {
             var tok = Token.init(self.allocator, arg);
             const token = try tok.parse();
 
-            // todo print help on run
             if (token.isHelp()) {
                 self.seek_help = true;
                 var p: ?*Self = self.parent;
