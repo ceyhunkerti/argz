@@ -146,9 +146,7 @@ pub const Option = struct {
     }
 
     pub fn validateNames(self: Self) !void {
-        if (utils.hasDuplicate([]const []const u8, self.names)) {
-            return Error.DuplicateName;
-        }
+        if (utils.hasDuplicate([]const []const u8, self.names)) return Error.DuplicateName;
     }
 };
 
