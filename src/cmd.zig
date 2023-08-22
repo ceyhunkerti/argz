@@ -81,9 +81,7 @@ fn buildUsage(c: Command) ![]const u8 {
 pub fn help(c: Command) ![]const u8 {
     var buffer = std.ArrayList([]const u8).init(c.allocator);
     defer {
-        for (buffer.items) |b| {
-            c.allocator.free(b);
-        }
+        for (buffer.items) |b| c.allocator.free(b);
         buffer.deinit();
     }
 
@@ -116,14 +114,22 @@ pub const Command = struct {
 
     allocator: std.mem.Allocator,
 
+    // name of the command if it's a subcommand must be unique among the siblings
     name: []const u8,
 
+    // list of option parameters
+    // option names should be unique for the attached command.
+    // different options attached to the same command can not have the same name in their `names` list.
     options: ?std.ArrayList(Option) = null,
 
+    // description of the command
     description: ?[]const u8 = null,
 
+    // list of subcommands for this command.
     commands: ?std.ArrayList(Command) = null,
 
+    // computed in the parse step.
+    // DO NOT set it directly
     args: ?std.ArrayList([]const u8) = null,
 
     // *    : zero or more arguments
@@ -134,22 +140,37 @@ pub const Command = struct {
     // null : (default) same as zero arguments
     nargs: ?[]const u8 = null,
 
+    // custom validation function for this command
     validate: ?*const fn (cmd: Self) anyerror!void = validate,
 
+    // custom run function for this command.
     run: ?*const fn (self: *Self) anyerror!void = run,
 
+    // optional hooks to attach to the locations at parse/run time
+    // see hooks.zig for more.
     hooks: ?*Hooks = null,
 
+    // custom help string generator. owner must deallocate the returned memory!
     help: *const fn (cmd: Self) anyerror![]const u8 = help,
 
+    // computed argument count limits during parse step.
+    // DO NOT set this attribute directly
     n_args: ?struct { lower: ?u8 = null, upper: ?u8 = null } = null,
 
+    // computed at the parse time.
+    // DO NOT set this attribute directly
     active: bool = false,
 
+    // computed at the parse time.
+    // DO NOT set this attribute directly
     root: bool = true,
 
+    // computed at the command building step and at the parse step.
     parent: ?*Command = null,
 
+    // computed at the parse time. if this attribute is true only the help message printed
+    // and hooks and the run functions are skipped.
+    // DO NOT set this attribute directly
     seek_help: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, name: []const u8) Self {

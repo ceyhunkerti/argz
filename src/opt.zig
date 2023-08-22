@@ -28,22 +28,35 @@ fn _validate(_: Option) anyerror!void {}
 pub const Option = struct {
     const Self = @This();
 
+    // defaults to true. if set to false will use the default value.
     required: bool = true,
 
+    // list of unique names for this option. single character strings are interpreted as short names
+    // and two or more character strings are interpreted as long option names.
     names: []const []const u8,
 
+    // different than bool type, does not require a value.
     is_flag: bool = false,
 
+    // description of the option
     description: ?[]const u8 = null,
 
+    // default value of the option, parset according to the type value
     default: ?[]const u8 = null,
 
+    // option's value type
     type: ValueType = ValueType.string,
 
+    // parset value of the option.
+    // computed at the parse time.
+    // DO NOT set this attribute directly
     value: ?Value = null,
 
+    // assigned at the parse time. raw value of the option.
+    // DO NOT set this attribute directly
     str: ?[]const u8 = null,
 
+    // custom validation function for the option.
     validate: ?*const fn (self: Self) anyerror!void = _validate,
 
     pub fn init(names: []const []const u8) Self {
