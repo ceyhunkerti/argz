@@ -23,7 +23,7 @@ pub const Value = union(ValueType) {
     boolean: bool,
 };
 
-fn _validate(_: Option) anyerror!void {}
+fn validate(_: Option) anyerror!void {}
 
 pub const Option = struct {
     const Self = @This();
@@ -57,7 +57,7 @@ pub const Option = struct {
     str: ?[]const u8 = null,
 
     // custom validation function for the option.
-    validate: ?*const fn (self: Self) anyerror!void = _validate,
+    validate: ?*const fn (self: Self) anyerror!void = validate,
 
     pub fn init(names: []const []const u8) Self {
         return Self{ .names = names };
@@ -85,9 +85,7 @@ pub const Option = struct {
     }
 
     pub fn eq(self: Self, name: []const u8) bool {
-        for (self.names) |n| {
-            if (std.mem.eql(u8, name, n)) return true;
-        }
+        for (self.names) |n| if (std.mem.eql(u8, name, n)) return true;
         return false;
     }
 
