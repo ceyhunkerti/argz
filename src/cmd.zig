@@ -30,31 +30,29 @@ pub const State = enum {
     options_terminated,
 };
 
-pub fn run(self: *Command) anyerror!void {
-    _ = self;
+pub fn run(_: *Command) anyerror!void {}
+
+fn run_wrapper(c: *Command) anyerror!void {
+    if (c.run) |r| try r(c);
+    if (c.getActiveCommand()) |a| try run_wrapper(a);
 }
 
-fn run_wrapper(self: *Command) anyerror!void {
-    if (self.run) |r| try r(self);
-    if (self.getActiveCommand()) |a| try run_wrapper(a);
-}
+fn validateArgs(c: Command) anyerror!void {
+    const al = if (c.args) |a| a.items.len else 0;
 
-fn validateArgs(command: Command) anyerror!void {
-    const al = if (command.args) |a| a.items.len else 0;
-
-    const n = command.n_args orelse return Error.ParseError;
+    const n = c.n_args orelse return Error.ParseError;
 
     if (al < (n.lower orelse 0)) return Error.NotEnoughArguments;
     if (n.upper != null and n.upper.? < al) return Error.ArgumentCountOverflow;
 }
 
-pub fn validate(command: Command) anyerror!void {
-    if (command.options) |options|
+pub fn validate(c: Command) anyerror!void {
+    if (c.options) |options|
         for (options.items) |option| if (option.validate) |vl| try vl(option);
 
-    try validateArgs(command);
+    try validateArgs(c);
 
-    if (command.commands) |subs| for (subs.items) |sub| if (sub.validate) |vl| try vl(sub);
+    if (c.commands) |subs| for (subs.items) |sub| if (sub.validate) |vl| try vl(sub);
 }
 
 fn buildUsage(c: Command) ![]const u8 {
@@ -84,37 +82,37 @@ fn buildUsage(c: Command) ![]const u8 {
     return try std.mem.join(c.allocator, " ", usage.items);
 }
 
-pub fn help(self: Command) ![]const u8 {
-    var buffer = std.ArrayList([]const u8).init(self.allocator);
+pub fn help(c: Command) ![]const u8 {
+    var buffer = std.ArrayList([]const u8).init(c.allocator);
     defer {
         for (buffer.items) |b| {
-            self.allocator.free(b);
+            c.allocator.free(b);
         }
         buffer.deinit();
     }
 
-    var usage = try buildUsage(self);
+    var usage = try buildUsage(c);
     try buffer.append(usage);
     try buffer.append(
-        try std.fmt.allocPrint(self.allocator, "\n{s}", .{self.desc()}),
+        try std.fmt.allocPrint(c.allocator, "\n{s}", .{c.desc()}),
     );
-    if (self.commands) |subs| {
-        try buffer.append(try std.fmt.allocPrint(self.allocator, "\nCommands:\n", .{}));
+    if (c.commands) |subs| {
+        try buffer.append(try std.fmt.allocPrint(c.allocator, "\nCommands:\n", .{}));
         for (subs.items) |sub|
             try buffer.append(
-                try std.fmt.allocPrint(self.allocator, "  {s:<30}{?s}", .{ sub.name, sub.desc() }),
+                try std.fmt.allocPrint(c.allocator, "  {s:<30}{?s}", .{ sub.name, sub.desc() }),
             );
     }
-    if (self.options) |options| {
-        try buffer.append(try std.fmt.allocPrint(self.allocator, "\nOptions:\n", .{}));
+    if (c.options) |options| {
+        try buffer.append(try std.fmt.allocPrint(c.allocator, "\nOptions:\n", .{}));
         for (options.items) |o| {
-            var h = try o.help(self.allocator);
-            var ind = try std.fmt.allocPrint(self.allocator, "  {s}", .{h});
-            self.allocator.free(h);
+            var h = try o.help(c.allocator);
+            var ind = try std.fmt.allocPrint(c.allocator, "  {s}", .{h});
+            c.allocator.free(h);
             try buffer.append(ind);
         }
     }
-    return try std.mem.join(self.allocator, "\n", buffer.items);
+    return try std.mem.join(c.allocator, "\n", buffer.items);
 }
 
 pub const Command = struct {
