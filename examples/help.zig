@@ -45,11 +45,11 @@ pub fn main() !void {
         .description = "flag option description",
     };
 
-    try root.addOption(&o1);
+    try root.addOption(o1);
 
     var sub1 = Command.init(allocator, "sub1");
     sub1.description = "my sub command description";
-    try root.addCommand(&sub1);
+    try root.addCommand(sub1);
 
     defer root.deinit();
     root.description = "root command desc";

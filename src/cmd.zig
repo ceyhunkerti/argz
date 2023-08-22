@@ -11,6 +11,7 @@ const testing = std.testing;
 const Option = opt.Option;
 
 pub const Error = error{
+    NotEnoughArguments,
     ArgumentCountOverflow,
     DuplicateCommandName,
     DuplicateOptionName,
@@ -38,9 +39,20 @@ fn run_wrapper(self: *Command) anyerror!void {
     if (self.getActiveCommand()) |a| try run_wrapper(a);
 }
 
-pub fn validate(command: *Command) anyerror!void {
+fn validateArgs(command: Command) anyerror!void {
+    var al = if (command.args) |a| a.items.len else 0;
+
+    var n = command.n_args orelse return Error.ParseError;
+
+    if (al < (n.lower orelse 0)) return Error.NotEnoughArguments;
+    if (n.upper != null and n.upper.? < al) return Error.ArgumentCountOverflow;
+}
+
+pub fn validate(command: Command) anyerror!void {
     if (command.options) |options|
-        for (options.items) |option| if (option.validate) |vl| try vl(option.*);
+        for (options.items) |option| if (option.validate) |vl| try vl(option);
+
+    try validateArgs(command);
 
     if (command.commands) |subs| for (subs.items) |sub| if (sub.validate) |vl| try vl(sub);
 }
@@ -53,22 +65,35 @@ pub fn help(self: Command) ![]const u8 {
         }
         buffer.deinit();
     }
+
+    var usage = std.ArrayList([]const u8).init(self.allocator);
+    defer usage.deinit();
+    var u = try std.fmt.allocPrint(self.allocator, "Usage: {s}", .{self.name});
+    defer self.allocator.free(u);
+    try usage.append(u);
+    if (self.n_args) |n| if (n.upper != 0) try usage.append("[arguments]");
+    if (self.options) |_| try usage.append("[options]");
+    if (self.commands) |_| try usage.append("[commands]");
+
+    try buffer.append(try std.mem.join(self.allocator, " ", usage.items));
     try buffer.append(
-        try std.fmt.allocPrint(self.allocator, "Usage: {s} [arguments] [options] [commands]", .{self.name}),
-    );
-    try buffer.append(
-        try std.fmt.allocPrint(self.allocator, "\n{?s}", .{self.description}),
+        try std.fmt.allocPrint(self.allocator, "\n{s}", .{self.desc()}),
     );
     if (self.commands) |subs| {
         try buffer.append(try std.fmt.allocPrint(self.allocator, "\nCommands:\n", .{}));
         for (subs.items) |sub|
             try buffer.append(
-                try std.fmt.allocPrint(self.allocator, "{s:<30}{?s}", .{ sub.name, sub.description }),
+                try std.fmt.allocPrint(self.allocator, "  {s:<30}{?s}", .{ sub.name, sub.desc() }),
             );
     }
     if (self.options) |options| {
         try buffer.append(try std.fmt.allocPrint(self.allocator, "\nOptions:\n", .{}));
-        for (options.items) |o| try buffer.append(try o.help(self.allocator));
+        for (options.items) |o| {
+            var h = try o.help(self.allocator);
+            var ind = try std.fmt.allocPrint(self.allocator, "  {s}", .{h});
+            self.allocator.free(h);
+            try buffer.append(ind);
+        }
     }
     return try std.mem.join(self.allocator, "\n", buffer.items);
 }
@@ -80,11 +105,11 @@ pub const Command = struct {
 
     name: []const u8,
 
-    options: ?std.ArrayList(*Option) = null,
+    options: ?std.ArrayList(Option) = null,
 
     description: ?[]const u8 = null,
 
-    commands: ?std.ArrayList(*Self) = null,
+    commands: ?std.ArrayList(Command) = null,
 
     args: ?std.ArrayList([]const u8) = null,
 
@@ -96,7 +121,7 @@ pub const Command = struct {
     // null : (default) same as zero arguments
     nargs: ?[]const u8 = null,
 
-    validate: ?*const fn (cmd: *Self) anyerror!void = validate,
+    validate: ?*const fn (cmd: Self) anyerror!void = validate,
 
     run: ?*const fn (self: *Self) anyerror!void = run,
 
@@ -110,6 +135,10 @@ pub const Command = struct {
 
     root: bool = true,
 
+    parent: ?*Command = null,
+
+    seek_help: bool = false,
+
     pub fn init(allocator: std.mem.Allocator, name: []const u8) Self {
         return Self{
             .allocator = allocator,
@@ -120,7 +149,7 @@ pub const Command = struct {
         if (self.args) |args| args.deinit();
         if (self.options) |options| options.deinit();
         if (self.commands) |subs| {
-            for (subs.items) |sub| sub.deinit();
+            for (subs.items) |*sub| sub.deinit();
             subs.deinit();
         }
     }
@@ -128,24 +157,28 @@ pub const Command = struct {
     pub fn start(self: *Self) !void {
         if (!self.root) return Error.NotRootCommand;
 
-        try self.runHooks(Hooks.Location.pre_start);
-        try run_wrapper(self);
-        try self.runHooks(Hooks.Location.success);
+        if (self.seek_help) {
+            try self.seekHelp();
+        } else {
+            try self.runHooks(Hooks.Location.pre_start);
+            try run_wrapper(self);
+            try self.runHooks(Hooks.Location.success);
+        }
     }
 
     pub fn reset(self: *Self) void {
         self.n_args = null;
         self.active = false;
         self.root = true;
-        if (self.options) |opts| for (opts.items) |o| o.reset();
-        if (self.commands) |subs| for (subs.items) |s| s.reset();
+        if (self.options) |opts| for (opts.items) |*o| o.reset();
+        if (self.commands) |subs| for (subs.items) |*s| s.reset();
     }
 
     // arguments
 
     pub fn setNArgs(self: *Self) !void {
         const nargs = self.nargs orelse {
-            self.n_args = .{ .lower = 0 };
+            self.n_args = .{ .lower = 0, .upper = 0 };
             return;
         };
 
@@ -178,20 +211,20 @@ pub const Command = struct {
 
     // options
 
-    pub fn addOption(self: *Command, option: *Option) !void {
-        self.options = self.options orelse std.ArrayList(*Option).init(self.allocator);
+    pub fn addOption(self: *Command, option: Option) !void {
+        self.options = self.options orelse std.ArrayList(Option).init(self.allocator);
         try self.options.?.append(option);
     }
 
-    pub fn addOptions(self: *Command, options: []const *Option) !void {
-        self.options = self.options orelse std.ArrayList(*Option).init(self.allocator);
+    pub fn addOptions(self: *Command, options: []const Option) !void {
+        self.options = self.options orelse std.ArrayList(Option).init(self.allocator);
         try self.options.?.appendSlice(options);
     }
 
     pub fn getOption(self: Self, name: []const u8) ?*Option {
         const options = self.options orelse return null;
 
-        for (options.items) |o| if (utils.contains([]const u8, o.names, name)) return o;
+        for (options.items) |*o| if (utils.contains([]const u8, o.names, name)) return o;
 
         return null;
     }
@@ -199,34 +232,32 @@ pub const Command = struct {
     pub fn getFlag(self: Self, name: []const u8) ?*Option {
         const options = self.options orelse return null;
 
-        for (options.items) |o| if (o.is_flag and utils.contains([]const u8, o.names, name)) return o;
+        for (options.items) |*o| if (o.is_flag and utils.contains([]const u8, o.names, name)) return o;
 
         return null;
     }
 
     fn computeOptions(self: *Self) !void {
-        if (self.options) |ops| for (ops.items) |o| try o.compute();
-        if (self.commands) |subs| for (subs.items) |s| try s.computeOptions();
+        if (self.options) |ops| for (ops.items) |*o| try o.compute();
+        if (self.commands) |subs| for (subs.items) |*s| try s.computeOptions();
     }
 
     // subcommands
 
-    pub fn addCommand(self: *Command, command: *Self) !void {
-        self.commands = self.commands orelse std.ArrayList(*Self).init(self.allocator);
-        command.root = false;
-        try self.commands.?.append(command);
-    }
-
-    pub fn getCommand(self: Self, name: []const u8) ?*Self {
-        const commands = self.commands orelse return null;
-
-        for (commands.items) |c| if (std.mem.eql(u8, c.name, name)) return c;
-
+    pub fn getCommand(self: Command, name: []const u8) ?*Command {
+        if (self.commands) |subs| for (subs.items) |*s| if (std.mem.eql(u8, s.name, name)) return s;
         return null;
     }
 
+    pub fn addCommand(self: *Command, command: Command) !void {
+        self.commands = self.commands orelse std.ArrayList(Self).init(self.allocator);
+        var c = command;
+        c.root = false;
+        try self.commands.?.append(command);
+    }
+
     pub fn getActiveCommand(self: Self) ?*Self {
-        if (self.commands) |subs| for (subs.items) |s| if (s.active) return s;
+        if (self.commands) |subs| for (subs.items) |*s| if (s.active) return s;
         return null;
     }
 
@@ -292,6 +323,10 @@ pub const Command = struct {
         try self.validateUniqueSubCommandName();
     }
 
+    fn seekHelp(self: Self) !void {
+        if (self.getActiveCommand()) |a| try seekHelp(a.*) else try self.print();
+    }
+
     pub fn print(self: Self) !void {
         if (builtin.is_test) return;
 
@@ -316,7 +351,7 @@ pub const Command = struct {
         while (it.next()) |n| try items.append(n);
         var arguments = try items.toOwnedSlice();
         defer self.allocator.free(arguments);
-        self.parseSlice(arguments) catch |err| {
+        self.parseSlice(arguments[1..]) catch |err| {
             try self.print();
             return err;
         };
@@ -332,6 +367,7 @@ pub const Command = struct {
         }
 
         try self.runHooks(Hooks.Location.pre_parse);
+
         try self.prepare();
 
         if (arguments) |args| for (args, 0..) |arg, i| {
@@ -340,8 +376,14 @@ pub const Command = struct {
             var tok = Token.init(self.allocator, arg);
             const token = try tok.parse();
 
+            // todo print help on run
             if (token.isHelp()) {
-                try self.print();
+                self.seek_help = true;
+                var p: ?*Self = self.parent;
+                while (p != null) {
+                    p.?.seek_help = true;
+                    p = p.?.parent;
+                }
                 return;
             }
 
@@ -374,9 +416,7 @@ pub const Command = struct {
                     state = .expect_value;
                     continue;
                 }
-            }
-
-            if (token.isAtom()) {
+            } else if (token.isAtom()) {
                 const atom = token.body orelse return Error.ParseError;
 
                 // can be an argument or the value of the partial or a sub command
@@ -389,6 +429,7 @@ pub const Command = struct {
                     }
                 } else if (self.getCommand(atom)) |sub| {
                     sub.root = false;
+                    sub.parent = self;
                     try sub.parseSlice(if (i == args.len) null else args[i + 1 ..]);
                     break;
                 } else {
@@ -397,9 +438,17 @@ pub const Command = struct {
                 }
             }
         };
-        try self.computeOptions();
-        if (self.validate) |vl| try vl(self);
-        try self.runHooks(Hooks.Location.parse_success);
+        if (!self.seek_help) {
+            try self.computeOptions();
+            if (self.validate) |vl| try vl(self.*);
+            try self.runHooks(Hooks.Location.parse_success);
+        }
+    }
+
+    // convenience
+
+    pub fn desc(self: Self) []const u8 {
+        return self.description orelse "";
     }
 };
 
@@ -413,7 +462,7 @@ test "Command.addOption" {
     var command = Command.init(testing.allocator, "my-command");
     defer command.deinit();
     var option = Option{ .names = &.{"my-option"} };
-    try command.addOption(&option);
+    try command.addOption(option);
     try testing.expect(command.options != null);
     try testing.expect(command.options.?.items.len == 1);
     try testing.expectEqualStrings("my-option", command.options.?.items[0].names[0]);
@@ -424,7 +473,7 @@ test "Command.addOptions" {
     defer command.deinit();
     var fo = Option{ .names = &.{"my-first-option"} };
     var so = Option{ .names = &.{"my-second-option"} };
-    try command.addOptions(&.{ &fo, &so });
+    try command.addOptions(&.{ fo, so });
     try testing.expect(command.options != null);
     try testing.expect(command.options.?.items.len == 2);
     try testing.expectEqualStrings("my-first-option", command.options.?.items[0].names[0]);
@@ -437,15 +486,18 @@ test "Command.validateUniqueSubCommandName" {
 
     try command.validateUniqueSubCommandName();
 
+    var s0 = Command.init(testing.allocator, "x");
+    try command.addCommand(s0);
+
     var s1 = Command.init(testing.allocator, "s");
+    try command.addCommand(s1);
+
+    try command.validateUniqueSubCommandName();
+
     var s2 = Command.init(testing.allocator, "s");
-    try command.addCommand(&s1);
-    try command.addCommand(&s2);
+    try command.addCommand(s2);
 
     try testing.expectError(Error.DublicateSubCommand, command.validateUniqueSubCommandName());
-
-    s1.name = "s1";
-    try command.validateUniqueSubCommandName();
 }
 
 test "Command.validateUniqueOptionName" {
@@ -457,17 +509,15 @@ test "Command.validateUniqueOptionName" {
     var o1 = Option{ .is_flag = true, .names = &.{ "a", "b" } };
     var o2 = Option{ .is_flag = true, .names = &.{ "a", "c" } };
 
-    try command.addOption(&o1);
+    try command.addOption(o1);
     try command.validateUniqueOptionName();
 
     o1.names = &.{ "a", "a" };
+    try command.addOption(o1);
     try testing.expectError(Error.DuplicateOptionName, command.validateUniqueOptionName());
-    o1.names = &.{ "a", "b" };
 
-    try command.addOption(&o2);
+    try command.addOption(o2);
     try testing.expectError(Error.DuplicateOptionName, command.validateUniqueOptionName());
-    o2.names = &.{ "x", "y" };
-    try command.validateUniqueOptionName();
 }
 
 test "Command.setNArgs" {
@@ -476,7 +526,7 @@ test "Command.setNArgs" {
 
     try command.setNArgs();
     try testing.expectEqual(command.n_args.?.lower, 0);
-    try testing.expect(command.n_args.?.upper == null);
+    try testing.expectEqual(command.n_args.?.upper, 0);
 
     command.nargs = "*";
     try command.setNArgs();
@@ -520,13 +570,21 @@ test "Command.computeOptions" {
         .type = opt.ValueType.boolean,
         .str = "true",
     };
-    try command.addOption(&option);
-    var sub = Command.init(testing.allocator, "my-subcommand");
-    try sub.addOption(&option);
-    try command.addCommand(&sub);
+    try command.addOption(option);
+    var sub = Command.init(testing.allocator, "sub");
+    try sub.addOption(option);
+    try command.addCommand(sub);
     try command.computeOptions();
 
-    option.str = null;
+    var option2 = Option{
+        .names = &.{"option2"},
+        .type = opt.ValueType.string,
+        .required = true,
+        .str = null,
+    };
+
+    try command.getCommand("sub").?.addOption(option2);
+
     try testing.expectError(opt.Error.MissingValue, command.computeOptions());
 }
 
@@ -550,19 +608,13 @@ test "Command.parse basic success" {
         .names = &.{ "bool-option", "b" },
         .is_flag = true,
         .default = "false",
-        .type = opt.ValueType.boolean,
     };
     var x_option = Option{
         .required = false,
         .names = &.{ "xflag", "x" },
         .is_flag = true,
     };
-    try command.addOptions(&.{
-        &b_option,
-        &s_option,
-        &i_option,
-        &x_option,
-    });
+    try command.addOptions(&[_]Option{ b_option, s_option, i_option, x_option });
 
     try command.parseSlice(
         &.{ "--int-option=1", "-b", "-s=hello" },
@@ -610,40 +662,28 @@ test "Command.parse chained flags" {
     var a = Option{ .names = &.{"a"}, .is_flag = true };
     var b = Option{ .names = &.{"b"}, .is_flag = true };
     var c = Option{ .names = &.{"c"}, .is_flag = true };
-    try command.addOptions(&.{ &a, &b, &c });
+    try command.addOptions(&[_]Option{ a, b });
+    try command.addOption(c);
     try command.parseSlice(&.{"-abc"});
-    try testing.expectEqual(a.value.?.boolean, true);
-    try testing.expectEqual(b.value.?.boolean, true);
-    try testing.expectEqual(c.value.?.boolean, true);
 
     try command.parseSlice(&.{ "-ac", "arg", "arg" });
-    try testing.expectEqual(a.value.?.boolean, true);
     try testing.expectEqual(command.options.?.items[1].value.?.boolean, false);
-    try testing.expectEqual(b.value.?.boolean, false);
-    try testing.expectEqual(c.value.?.boolean, true);
 }
 
 test "Command.parse with subcommands" {
     var root = Command.init(testing.allocator, "root");
     defer root.deinit();
     var sub = Command.init(testing.allocator, "sub");
-    try root.addCommand(&sub);
     var a = Option{ .names = &.{"a"}, .is_flag = true };
     var b = Option{ .names = &.{"b"}, .is_flag = true };
     var c = Option{ .names = &.{"c"}, .is_flag = true };
-    try sub.addOptions(&.{ &a, &b, &c });
-
+    try sub.addOptions(&.{ a, b, c });
+    try root.addCommand(sub);
     try root.parseSlice(&.{ "sub", "-abc" });
-    try testing.expectEqual(a.value.?.boolean, true);
-    try testing.expectEqual(b.value.?.boolean, true);
-    try testing.expectEqual(c.value.?.boolean, true);
 
-    sub.nargs = "*";
+    root.getCommand("sub").?.nargs = "*";
     try root.parseSlice(&.{ "sub", "-ac", "arg", "arg" });
-    try testing.expectEqual(a.value.?.boolean, true);
     try testing.expectEqual(sub.options.?.items[1].value.?.boolean, false);
-    try testing.expectEqual(b.value.?.boolean, false);
-    try testing.expectEqual(c.value.?.boolean, true);
 }
 
 test "Command.help" {
@@ -652,7 +692,7 @@ test "Command.help" {
     defer command.deinit();
     var e1 = try command.help(command);
     defer testing.allocator.free(e1);
-    var h1 = "Usage: root [arguments] [options] [commands]" ++ "\n\nmy root command";
+    var h1 = "Usage: root" ++ "\n\nmy root command";
 
     try testing.expectEqualStrings(h1, e1);
 
@@ -666,30 +706,30 @@ test "Command.help" {
         .names = &.{"x"},
         .description = "option 2",
     };
-    try command.addOptions(&.{ &o1, &o2 });
+    try command.addOptions(&.{ o1, o2 });
     var e2 = try command.help(command);
     defer testing.allocator.free(e2);
     var h2 =
-        "Usage: root [arguments] [options] [commands]\n" ++
+        "Usage: root [options]\n" ++
         "\nmy root command\n" ++
         "\nOptions:\n\n" ++
-        "-o,--op1                      option 1\n" ++
-        "-x                            option 2";
+        "  -o,--op1                      option 1\n" ++
+        "  -x                            option 2";
     try testing.expectEqualStrings(h2, e2);
 
     var s1 = Command.init(testing.allocator, "subcommand");
     s1.description = "subcommand desc";
-    try command.addCommand(&s1);
+    try command.addCommand(s1);
     var e3 = try command.help(command);
     defer testing.allocator.free(e3);
     var h3 =
-        "Usage: root [arguments] [options] [commands]\n" ++
+        "Usage: root [options] [commands]\n" ++
         "\nmy root command\n" ++
         "\nCommands:\n\n" ++
-        "subcommand                    subcommand desc\n" ++
+        "  subcommand                    subcommand desc\n" ++
         "\nOptions:\n\n" ++
-        "-o,--op1                      option 1\n" ++
-        "-x                            option 2";
+        "  -o,--op1                      option 1\n" ++
+        "  -x                            option 2";
     try testing.expectEqualStrings(h3, e3);
 }
 
@@ -697,6 +737,6 @@ test "Command.print" {
     var root = Command.init(testing.allocator, "root-command");
     defer root.deinit();
     var o1 = Option{ .names = &.{ "a", "abc" }, .is_flag = true };
-    try root.addOption(&o1);
+    try root.addOption(o1);
     try root.print();
 }

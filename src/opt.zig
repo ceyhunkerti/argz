@@ -63,7 +63,7 @@ pub const Option = struct {
         defer allocator.free(names);
         defer for (buffer.items) |b| allocator.free(b);
 
-        return try std.fmt.allocPrint(allocator, "{s:<30}{?s}", .{ names, self.description });
+        return try std.fmt.allocPrint(allocator, "{s:<30}{?s}", .{ names, self.desc() });
     }
 
     pub fn reset(self: *Self) void {
@@ -101,21 +101,29 @@ pub const Option = struct {
             return Error.MissingValue;
         }
     }
+    // convenience
 
     pub fn isBoolean(self: Self) bool {
         return self.type == ValueType.boolean or self.is_flag;
     }
 
-    pub fn boolValue(self: Self) bool {
-        return self.value.?.boolean;
+    pub fn boolValue(self: Self) ?bool {
+        if (self.value) |v| return v;
+        return null;
     }
 
-    pub fn stringValue(self: Self) []const u8 {
-        return self.value.?.string;
+    pub fn stringValue(self: Self) ?[]const u8 {
+        if (self.value) |v| return v.string;
+        return null;
     }
 
-    pub fn intValue(self: Self) i32 {
-        return self.value.?.int;
+    pub fn intValue(self: Self) ?i32 {
+        if (self.value) |v| return v.int;
+        return null;
+    }
+
+    pub fn desc(self: Self) []const u8 {
+        return self.description orelse "";
     }
 
     // validations

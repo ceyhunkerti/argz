@@ -6,21 +6,27 @@ const Command = lib.Command;
 const Option = lib.Option;
 const ValueType = lib.ValueType;
 
-const printf = std.debug.print;
-fn print(s: []const u8) void {
-    printf("{s}", .{s});
-}
-
 const Error = error{
     GenericError,
 };
 
+fn fatal(comptime fmt_string: []const u8, args: anytype) noreturn {
+    const stderr = std.io.getStdErr().writer();
+    stderr.print("error: " ++ fmt_string ++ "\n", args) catch {};
+    std.os.exit(1);
+}
+
 pub fn runRoot(c: *Command) anyerror!void {
-    _ = c;
+    const int_option = c.getOption("i");
+    if (int_option) |io| {
+        std.debug.print("@root: the value of the option 'i' is {d}\n", .{io.intValue().?});
+    } else {
+        fatal("failed to find option 'i'", .{});
+    }
 }
 
 pub fn runSub1(c: *Command) anyerror!void {
-    _ = c;
+    std.debug.print("@{s}: running subcommand\n", .{c.name});
 }
 
 pub fn main() !void {
@@ -43,46 +49,29 @@ pub fn main() !void {
 
     var os1 = Option{
         .names = &.{ "s", "string-option-1" },
-        .is_flag = true,
+        .type = ValueType.string,
+        .required = false,
     };
 
     var sub1 = Command{
         .allocator = allocator,
-        .name = "root",
-        .description = "my root command description",
-        .options = &.{ &oi1, &of1, &os1 },
+        .name = "sub",
+        .description = "my sub command description",
         .nargs = "1..3",
-        .run = runRoot,
+        .run = runSub1,
     };
-    _ = sub1;
 
     var root = Command{
         .allocator = allocator,
         .name = "root",
         .description = "my root command description",
-        .options = &.{ &oi1, &of1, &os1 },
         .nargs = "1..3",
         .run = runRoot,
     };
-    _ = root;
+    defer root.deinit();
+    try root.addOptions(&.{ oi1, os1, of1 });
+    try root.addCommand(sub1);
 
-    // Command.init(allocator, "root");
-    // root.run = runRoot;
-
-    // var o1 = Option{
-    //     .names = &.{ "f", "my-flag" },
-    //     .is_flag = true,
-    //     .description = "flag option description",
-    // };
-
-    // try root.addOption(&o1);
-
-    // var sub1 = Command.init(allocator, "sub1");
-    // sub1.description = "my sub command description";
-    // try root.addCommand(&sub1);
-
-    // defer root.deinit();
-    // root.description = "root command desc";
-    // try root.parse();
-    // try root.start();
+    try root.parse();
+    try root.start();
 }
