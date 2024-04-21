@@ -35,25 +35,25 @@ pub fn main() !void {
         const check = gpa.deinit();
         if (check == .leak) @panic("memory leaked");
     }
-    var allocator = gpa.allocator();
+    const allocator = gpa.allocator();
 
-    var oi1 = Option{
+    const oi1 = Option{
         .names = &.{ "i", "int-option-1" },
         .type = ValueType.int,
         .default = "10",
     };
-    var of1 = Option{
+    const of1 = Option{
         .names = &.{ "f", "flag-option-1" },
         .is_flag = true,
     };
 
-    var os1 = Option{
+    const os1 = Option{
         .names = &.{ "s", "string-option-1" },
         .type = ValueType.string,
         .required = false,
     };
 
-    var sub1 = Command{
+    const sub1 = Command{
         .allocator = allocator,
         .name = "sub",
         .description = "my sub command description",

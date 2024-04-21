@@ -34,12 +34,12 @@ pub fn main() !void {
         const check = gpa.deinit();
         if (check == .leak) @panic("memory leaked");
     }
-    var allocator = gpa.allocator();
+    const allocator = gpa.allocator();
 
     var root = Command.init(allocator, "root");
     root.run = runRoot;
 
-    var o1 = Option{
+    const o1 = Option{
         .names = &.{ "f", "my-flag" },
         .is_flag = true,
         .description = "flag option description",

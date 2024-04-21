@@ -5,7 +5,7 @@ const std = @import("std");
 // runner.
 pub fn build(b: *std.Build) void {
     const module = b.addModule("argz", .{
-        .source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "src/main.zig" },
     });
 
     // Standard target options allows the person running `zig build` to choose
@@ -63,7 +63,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        example.addModule("argz", module);
+        example.root_module.addImport("argz", module);
         example.linkLibrary(lib);
 
         var run = b.addRunArtifact(example);

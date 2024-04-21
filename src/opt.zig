@@ -68,11 +68,11 @@ pub const Option = struct {
         defer buffer.deinit();
 
         for (self.names) |name| {
-            var dash = if (name.len == 1) "-" else "--";
-            var n = try std.fmt.allocPrint(allocator, "{s}{s}", .{ dash, name });
+            const dash = if (name.len == 1) "-" else "--";
+            const n = try std.fmt.allocPrint(allocator, "{s}{s}", .{ dash, name });
             try buffer.append(n);
         }
-        var names = try std.mem.join(allocator, ",", buffer.items);
+        const names = try std.mem.join(allocator, ",", buffer.items);
         defer allocator.free(names);
         defer for (buffer.items) |b| allocator.free(b);
 
@@ -149,16 +149,16 @@ pub const Option = struct {
 };
 
 test "Option.init" {
-    var o = Option.init(&[_][]const u8{ "o", "option" });
+    const o = Option.init(&[_][]const u8{ "o", "option" });
     try testing.expectEqual(o.names.len, 2);
 }
 
 test "Option.help" {
     var o = Option.init(&[_][]const u8{ "o", "option" });
     o.description = "my option description";
-    var help = try o.help(testing.allocator);
+    const help = try o.help(testing.allocator);
     defer testing.allocator.free(help);
-    var expected = "-o,--option                   my option description";
+    const expected = "-o,--option                   my option description";
     try testing.expectEqualStrings(expected, help);
 }
 

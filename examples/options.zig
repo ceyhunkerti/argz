@@ -28,7 +28,7 @@ pub fn main() !void {
         const check = gpa.deinit();
         if (check == .leak) @panic("memory leaked");
     }
-    var allocator = gpa.allocator();
+    const allocator = gpa.allocator();
 
     var root = Command{
         .allocator = allocator,
@@ -37,27 +37,27 @@ pub fn main() !void {
     };
     defer root.deinit();
 
-    var intop = Option{
+    const intop = Option{
         .type = ValueType.int,
         .names = &.{ "int-option", "i" },
         .default = "10",
         .required = false,
     };
-    var strop = Option{
+    const strop = Option{
         .type = ValueType.string,
         .names = &.{ "str-option", "s" },
         .default = "mystring",
         .required = false,
     };
 
-    var boolop = Option{
+    const boolop = Option{
         .type = ValueType.boolean,
         .names = &.{ "bool-option", "b" },
         .default = "true",
         .required = false,
     };
 
-    var flag = Option{
+    const flag = Option{
         .is_flag = true,
         .names = &.{ "my-flag", "f" },
     };

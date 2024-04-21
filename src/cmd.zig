@@ -85,7 +85,7 @@ pub fn help(c: Command) ![]const u8 {
         buffer.deinit();
     }
 
-    var usage = try buildUsage(c);
+    const usage = try buildUsage(c);
     try buffer.append(usage);
     try buffer.append(
         try std.fmt.allocPrint(c.allocator, "\n{s}", .{c.desc()}),
@@ -100,8 +100,8 @@ pub fn help(c: Command) ![]const u8 {
     if (c.options) |options| {
         try buffer.append(try std.fmt.allocPrint(c.allocator, "\nOptions:\n", .{}));
         for (options.items) |o| {
-            var h = try o.help(c.allocator);
-            var ind = try std.fmt.allocPrint(c.allocator, "  {s}", .{h});
+            const h = try o.help(c.allocator);
+            const ind = try std.fmt.allocPrint(c.allocator, "  {s}", .{h});
             c.allocator.free(h);
             try buffer.append(ind);
         }
@@ -370,7 +370,7 @@ pub const Command = struct {
     pub fn print(self: Self) !void {
         if (builtin.is_test) return;
 
-        var content = try self.help(self);
+        const content = try self.help(self);
         defer self.allocator.free(content);
         std.debug.print("\n{s}\n", .{content});
     }
@@ -497,7 +497,7 @@ test "Command.init" {
 test "Command.addOption" {
     var command = Command.init(testing.allocator, "my-command");
     defer command.deinit();
-    var option = Option{ .names = &.{"my-option"} };
+    const option = Option{ .names = &.{"my-option"} };
     try command.addOption(option);
     try testing.expect(command.options != null);
     try testing.expect(command.options.?.items.len == 1);
@@ -507,8 +507,8 @@ test "Command.addOption" {
 test "Command.addOptions" {
     var command = Command.init(testing.allocator, "my-command");
     defer command.deinit();
-    var fo = Option{ .names = &.{"my-first-option"} };
-    var so = Option{ .names = &.{"my-second-option"} };
+    const fo = Option{ .names = &.{"my-first-option"} };
+    const so = Option{ .names = &.{"my-second-option"} };
     try command.addOptions(&.{ fo, so });
     try testing.expect(command.options != null);
     try testing.expect(command.options.?.items.len == 2);
@@ -522,15 +522,15 @@ test "Command.validateUniqueSubCommandName" {
 
     try command.validateUniqueSubCommandName();
 
-    var s0 = Command.init(testing.allocator, "x");
+    const s0 = Command.init(testing.allocator, "x");
     try command.addCommand(s0);
 
-    var s1 = Command.init(testing.allocator, "s");
+    const s1 = Command.init(testing.allocator, "s");
     try command.addCommand(s1);
 
     try command.validateUniqueSubCommandName();
 
-    var s2 = Command.init(testing.allocator, "s");
+    const s2 = Command.init(testing.allocator, "s");
     try command.addCommand(s2);
 
     try testing.expectError(Error.DublicateSubCommand, command.validateUniqueSubCommandName());
@@ -543,7 +543,7 @@ test "Command.validateUniqueOptionName" {
     try command.validateUniqueOptionName();
 
     var o1 = Option{ .is_flag = true, .names = &.{ "a", "b" } };
-    var o2 = Option{ .is_flag = true, .names = &.{ "a", "c" } };
+    const o2 = Option{ .is_flag = true, .names = &.{ "a", "c" } };
 
     try command.addOption(o1);
     try command.validateUniqueOptionName();
@@ -601,7 +601,7 @@ test "Command.validateNargs" {
 test "Command.computeOptions" {
     var command = Command.init(testing.allocator, "my-command");
     defer command.deinit();
-    var option = Option{
+    const option = Option{
         .names = &.{ "my-option", "o" },
         .type = opt.ValueType.boolean,
         .str = "true",
@@ -612,7 +612,7 @@ test "Command.computeOptions" {
     try command.addCommand(sub);
     try command.computeOptions();
 
-    var option2 = Option{
+    const option2 = Option{
         .names = &.{"option2"},
         .type = opt.ValueType.string,
         .required = true,
@@ -627,25 +627,25 @@ test "Command.computeOptions" {
 test "Command.parse basic success" {
     var command = Command.init(testing.allocator, "mycommand");
     defer command.deinit();
-    var i_option = Option{
+    const i_option = Option{
         .required = false,
         .names = &.{ "int-option", "i" },
         .default = "10",
         .type = opt.ValueType.int,
     };
-    var s_option = Option{
+    const s_option = Option{
         .required = false,
         .names = &.{ "str-option", "s" },
         .default = "my-string",
         .type = opt.ValueType.string,
     };
-    var b_option = Option{
+    const b_option = Option{
         .required = false,
         .names = &.{ "bool-option", "b" },
         .is_flag = true,
         .default = "false",
     };
-    var x_option = Option{
+    const x_option = Option{
         .required = false,
         .names = &.{ "xflag", "x" },
         .is_flag = true,
@@ -695,9 +695,9 @@ test "Command.parse chained flags" {
     command.nargs = "*";
 
     defer command.deinit();
-    var a = Option{ .names = &.{"a"}, .is_flag = true };
-    var b = Option{ .names = &.{"b"}, .is_flag = true };
-    var c = Option{ .names = &.{"c"}, .is_flag = true };
+    const a = Option{ .names = &.{"a"}, .is_flag = true };
+    const b = Option{ .names = &.{"b"}, .is_flag = true };
+    const c = Option{ .names = &.{"c"}, .is_flag = true };
     try command.addOptions(&[_]Option{ a, b });
     try command.addOption(c);
     try command.parseSlice(&.{"-abc"});
@@ -710,9 +710,9 @@ test "Command.parse with subcommands" {
     var root = Command.init(testing.allocator, "root");
     defer root.deinit();
     var sub = Command.init(testing.allocator, "sub");
-    var a = Option{ .names = &.{"a"}, .is_flag = true };
-    var b = Option{ .names = &.{"b"}, .is_flag = true };
-    var c = Option{ .names = &.{"c"}, .is_flag = true };
+    const a = Option{ .names = &.{"a"}, .is_flag = true };
+    const b = Option{ .names = &.{"b"}, .is_flag = true };
+    const c = Option{ .names = &.{"c"}, .is_flag = true };
     try sub.addOptions(&.{ a, b, c });
     try root.addCommand(sub);
     try root.parseSlice(&.{ "sub", "-abc" });
@@ -725,12 +725,12 @@ test "Command.parse with subcommands" {
 test "buildUsage" {
     var c = Command.init(testing.allocator, "root");
     defer c.deinit();
-    var h1 = try help(c);
+    const h1 = try help(c);
     defer testing.allocator.free(h1);
     try testing.expectEqualStrings("Usage: root\n\n", h1);
-    var sub = Command.init(testing.allocator, "sub");
+    const sub = Command.init(testing.allocator, "sub");
     try c.addCommand(sub);
-    var h2 = try help(c.getCommand("sub").?.*);
+    const h2 = try help(c.getCommand("sub").?.*);
     defer testing.allocator.free(h2);
     try testing.expectEqualStrings("Usage: root sub\n\n", h2);
 }
@@ -739,26 +739,26 @@ test "Command.help" {
     var command = Command.init(testing.allocator, "root");
     command.description = "my root command";
     defer command.deinit();
-    var e1 = try command.help(command);
+    const e1 = try command.help(command);
     defer testing.allocator.free(e1);
-    var h1 = "Usage: root" ++ "\n\nmy root command";
+    const h1 = "Usage: root" ++ "\n\nmy root command";
 
     try testing.expectEqualStrings(h1, e1);
 
-    var o1 = Option{
+    const o1 = Option{
         .is_flag = true,
         .names = &.{ "o", "op1" },
         .description = "option 1",
     };
-    var o2 = Option{
+    const o2 = Option{
         .is_flag = true,
         .names = &.{"x"},
         .description = "option 2",
     };
     try command.addOptions(&.{ o1, o2 });
-    var e2 = try command.help(command);
+    const e2 = try command.help(command);
     defer testing.allocator.free(e2);
-    var h2 =
+    const h2 =
         "Usage: root [options]\n" ++
         "\nmy root command\n" ++
         "\nOptions:\n\n" ++
@@ -769,9 +769,9 @@ test "Command.help" {
     var s1 = Command.init(testing.allocator, "subcommand");
     s1.description = "subcommand desc";
     try command.addCommand(s1);
-    var e3 = try command.help(command);
+    const e3 = try command.help(command);
     defer testing.allocator.free(e3);
-    var h3 =
+    const h3 =
         "Usage: root [options] [commands]\n" ++
         "\nmy root command\n" ++
         "\nCommands:\n\n" ++
@@ -785,7 +785,7 @@ test "Command.help" {
 test "Command.print" {
     var root = Command.init(testing.allocator, "root-command");
     defer root.deinit();
-    var o1 = Option{ .names = &.{ "a", "abc" }, .is_flag = true };
+    const o1 = Option{ .names = &.{ "a", "abc" }, .is_flag = true };
     try root.addOption(o1);
     try root.print();
 }

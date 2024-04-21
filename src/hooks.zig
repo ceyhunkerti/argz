@@ -54,8 +54,8 @@ pub const Hooks = struct {
     }
 
     pub fn run(self: *Self, loc: Location, command: *Command) !void {
-        var hl = self.map.getPtr(loc) orelse return Error.UnknownHookLocation;
-        for (hl.items) |h| try h.run(command);
+        const hook_loc = self.map.getPtr(loc) orelse return Error.UnknownHookLocation;
+        for (hook_loc.items) |h| try h.run(command);
     }
 };
 
@@ -65,7 +65,7 @@ test "Hooks.init" {
 }
 
 test "Hooks.add" {
-    var hook = Hook{
+    const hook = Hook{
         .name = "validation hook",
         .description = "hook description",
         .run = struct {
@@ -93,7 +93,7 @@ test "Hook.run" {
 test "Hooks.run" {
     var hooks = try Hooks.init(testing.allocator);
     defer hooks.deinit();
-    var hook = Hook{
+    const hook = Hook{
         .name = "validation hook",
         .description = "hook description",
         .run = struct {

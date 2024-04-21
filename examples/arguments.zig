@@ -18,7 +18,7 @@ pub fn main() !void {
         const check = gpa.deinit();
         if (check == .leak) @panic("memory leaked");
     }
-    var allocator = gpa.allocator();
+    const allocator = gpa.allocator();
 
     var root = Command{ .allocator = allocator, .name = "root", .run = myRootCommand, .nargs = "*" };
     defer root.deinit();
