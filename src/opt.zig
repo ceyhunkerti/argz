@@ -47,7 +47,7 @@ pub const Option = struct {
     // option's value type
     type: ValueType = ValueType.string,
 
-    // parset value of the option.
+    // parsed value of the option.
     // computed at the parse time.
     // DO NOT set this attribute directly
     value: ?Value = null,
@@ -148,12 +148,12 @@ pub const Option = struct {
     }
 };
 
-test "Option.init" {
+test "initialize an `option`" {
     const o = Option.init(&[_][]const u8{ "o", "option" });
     try testing.expectEqual(o.names.len, 2);
 }
 
-test "Option.help" {
+test "show `option` help" {
     var o = Option.init(&[_][]const u8{ "o", "option" });
     o.description = "my option description";
     const help = try o.help(testing.allocator);

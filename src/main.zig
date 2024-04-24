@@ -15,8 +15,6 @@ pub const ValueType = opt.ValueType;
 pub const Hook = hooks.Hook;
 pub const Hooks = hooks.Hooks;
 
-pub fn main() anyerror!void {}
-
 test "all" {
     testing.refAllDecls(@This());
 }
