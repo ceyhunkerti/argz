@@ -4,9 +4,7 @@ const std = @import("std");
 // declaratively construct a build graph that will be executed by an external
 // runner.
 pub fn build(b: *std.Build) void {
-    const module = b.addModule("argz", .{
-        .root_source_file = .{ .path = "src/main.zig" },
-    });
+    const module = b.addModule("argz", .{ .root_source_file = b.path("src/main.zig") });
 
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
@@ -23,7 +21,7 @@ pub fn build(b: *std.Build) void {
         .name = "argz",
         // In this case the main source file is merely a path, however, in more
         // complicated build scripts, this could be a generated file.
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -36,7 +34,7 @@ pub fn build(b: *std.Build) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
     const tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -49,7 +47,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_tests.step);
 
-    const docs_test = b.addTest(.{ .root_source_file = .{ .path = "src/main.zig" } });
+    const docs_test = b.addTest(.{ .root_source_file = b.path("src/main.zig") });
     const install_docs = b.addInstallDirectory(.{
         .source_dir = docs_test.getEmittedDocs(),
         .install_dir = .prefix,
@@ -68,7 +66,7 @@ pub fn build(b: *std.Build) void {
     }) |name| {
         const example = b.addExecutable(.{
             .name = name,
-            .root_source_file = .{ .path = "examples" ++ std.fs.path.sep_str ++ name ++ ".zig" },
+            .root_source_file = b.path("examples" ++ std.fs.path.sep_str ++ name ++ ".zig"),
             .target = target,
             .optimize = optimize,
         });
