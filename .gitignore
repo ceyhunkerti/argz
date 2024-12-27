@@ -1,4 +1,4 @@
 .vscode
 .uncommitted
 zig-out
-zig-cache
+.zig-cache
