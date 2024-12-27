@@ -13,7 +13,7 @@ Supports:
 
 ## Installation
 
-Use zig fetch --save to pull a version of the library into your build.zig.zon. (This requires at least Zig 0.11.)
+Use zig fetch --save to pull a version of the library into your `build.zig.zon`. (This requires at least Zig 0.11.)
 
 ```sh
 zig fetch --save "https://github.com/ceyhunkerti/argz/archive/refs/tags/0.0.1.tar.gz"
