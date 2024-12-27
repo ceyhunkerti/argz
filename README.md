@@ -11,6 +11,27 @@ Supports:
 - hooks for attaching user functions to specified locations.
 
 
+## Installation
+
+Use zig fetch --save to pull a version of the library into your build.zig.zon. (This requires at least Zig 0.11.)
+
+```sh
+zig fetch --save "https://github.com/ceyhunkerti/argz/archive/refs/tags/0.0.1.tar.gz"
+```
+
+Then in your `build.zig` file
+```zig
+
+...
+const argz = b.dependency("argz", .{
+    .target = target,
+    .optimize = optimize,
+});
+exe.root_module.addImport("argz", argz.module("argz"));
+...
+
+```
+
 ## Options
 
 You can specify number of options and attach those options to the command you want. Options are only valid
