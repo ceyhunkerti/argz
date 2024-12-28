@@ -1,7 +1,7 @@
 const std = @import("std");
-const cmd = @import("./cmd.zig");
-
 const testing = std.testing;
+
+const cmd = @import("./cmd.zig");
 const Command = cmd.Command;
 
 const Error = error{

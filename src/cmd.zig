@@ -40,10 +40,20 @@ fn run_wrapper(c: *Command) anyerror!void {
 fn validateArgs(c: Command) anyerror!void {
     const al = if (c.args) |a| a.items.len else 0;
 
-    const n = c.n_args orelse return Error.ParseError;
+    const n = c.n_args orelse {
+        std.debug.print("Invalid argument count in command: {s}\n", .{c.name});
+        return Error.ParseError;
+    };
 
-    if (al < (n.lower orelse 0)) return Error.NotEnoughArguments;
-    if (n.upper != null and n.upper.? < al) return Error.ArgumentCountOverflow;
+    const min_arg_count = n.lower orelse 0;
+    if (al < min_arg_count) {
+        std.debug.print("Not enough arguments in command: {s}. Expected min {d}, got {d}\n", .{ c.name, min_arg_count, al });
+        return Error.NotEnoughArguments;
+    }
+    if (n.upper != null and n.upper.? < al) {
+        std.debug.print("Too many arguments in command: {s}. Expected max {d}, got {d}\n", .{ c.name, n.upper.?, al });
+        return Error.ArgumentCountOverflow;
+    }
 }
 
 pub fn validate(c: Command) anyerror!void {
@@ -65,8 +75,8 @@ fn buildUsage(c: Command) ![]const u8 {
 
     var usage = std.ArrayList([]const u8).init(c.allocator);
     defer usage.deinit();
-    try usage.append("Usage:");
 
+    try usage.append("Usage:");
     var i: usize = 0;
     while (i != cmd_path.items.len) : (i += 1)
         try usage.append(cmd_path.items[cmd_path.items.len - 1 - i]);
@@ -335,13 +345,23 @@ pub const Command = struct {
         if (std.mem.eql(u8, nargs, "*")) {
             return;
         } else if (std.mem.containsAtLeast(u8, nargs, 3, ".")) {
+            std.debug.print("Invalid argument count spec: {s}\n", .{nargs});
             return error.InvalidArgumentCountSpec;
         } else if (std.mem.startsWith(u8, nargs, "..") or std.mem.endsWith(u8, nargs, "..")) {
-            _ = std.fmt.parseInt(u8, std.mem.trim(u8, nargs, ".."), 10) catch return error.InvalidArgumentCountSpec;
+            _ = std.fmt.parseInt(u8, std.mem.trim(u8, nargs, ".."), 10) catch {
+                std.debug.print("Invalid argument count spec: {s}\n", .{nargs});
+                return error.InvalidArgumentCountSpec;
+            };
         } else if (std.mem.indexOf(u8, nargs, "..")) |i| {
-            _ = std.fmt.parseInt(u8, nargs[i + 2 ..], 10) catch return error.InvalidArgumentCountSpec;
+            _ = std.fmt.parseInt(u8, nargs[i + 2 ..], 10) catch {
+                std.debug.print("Invalid argument count spec: {s}\n", .{nargs});
+                return error.InvalidArgumentCountSpec;
+            };
         } else {
-            _ = std.fmt.parseInt(u8, nargs, 10) catch return error.InvalidArgumentCountSpec;
+            _ = std.fmt.parseInt(u8, nargs, 10) catch {
+                std.debug.print("Invalid argument count spec: {s}\n", .{nargs});
+                return error.InvalidArgumentCountSpec;
+            };
         }
     }
 
@@ -351,8 +371,10 @@ pub const Command = struct {
         var m = std.StringHashMap(u8).init(self.allocator);
         defer m.deinit();
 
-        for (opts.items) |o| for (o.names) |n| if ((try m.getOrPut(n)).found_existing)
+        for (opts.items) |o| for (o.names) |n| if ((try m.getOrPut(n)).found_existing) {
+            std.debug.print("Duplicate option name: {s}\n", .{n});
             return Error.DuplicateOptionName;
+        };
     }
 
     pub fn validateParameters(self: Command) anyerror!void {
@@ -441,7 +463,10 @@ pub const Command = struct {
             }
 
             if (token.isOption() and !token.isKeyValue() and !token.isChained()) {
-                var option = self.getOption(token.body.?) orelse return error.UnknownOption;
+                var option = self.getOption(token.body.?) orelse {
+                    std.debug.print("Unknown option {s}\n", .{arg});
+                    return error.UnknownOption;
+                };
                 if (option.is_flag) {
                     option.str = "true";
                 } else {
@@ -451,7 +476,10 @@ pub const Command = struct {
                     continue;
                 }
             } else if (token.isAtom()) {
-                const atom = token.body orelse return Error.ParseError;
+                const atom = token.body orelse {
+                    std.debug.print("Unknown token {s}\n", .{arg});
+                    return Error.ParseError;
+                };
 
                 // can be an argument or the value of the partial or a sub command
                 if (state == .expect_value) {

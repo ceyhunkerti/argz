@@ -1,7 +1,7 @@
 const std = @import("std");
-const utils = @import("./utils.zig");
-
 const testing = std.testing;
+
+const utils = @import("./utils.zig");
 
 pub const Error = error{
     DuplicateName,
@@ -109,6 +109,7 @@ pub const Option = struct {
         } else if (self.is_flag) {
             try self.setValue("false");
         } else if (self.required) {
+            std.debug.print("Missing value for option: {s}\n", .{self.names[0]});
             return Error.MissingValue;
         }
     }
