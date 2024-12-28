@@ -1,14 +1,14 @@
-const builtin = @import("builtin");
 const std = @import("std");
-const opt = @import("./opt.zig");
-const Token = @import("./token.zig").Token;
-const hooks = @import("./hooks.zig");
-const utils = @import("./utils.zig");
-
 const testing = std.testing;
+const builtin = @import("builtin");
+
+const hooks = @import("./hooks.zig");
 const Hooks = hooks.Hooks;
 const Hook = hooks.Hook;
+const opt = @import("./opt.zig");
 const Option = opt.Option;
+const Token = @import("./token.zig").Token;
+const utils = @import("./utils.zig");
 
 pub const Error = error{
     NotEnoughArguments,
@@ -110,8 +110,6 @@ pub fn help(c: Command) ![]const u8 {
 }
 
 pub const Command = struct {
-    const Self = @This();
-
     allocator: std.mem.Allocator,
 
     // name of the command if it's a subcommand must be unique among the siblings
@@ -141,17 +139,17 @@ pub const Command = struct {
     nargs: ?[]const u8 = null,
 
     // custom validation function for this command
-    validate: ?*const fn (cmd: Self) anyerror!void = validate,
+    validate: ?*const fn (cmd: Command) anyerror!void = validate,
 
     // custom run function for this command.
-    run: ?*const fn (self: *Self) anyerror!void = run,
+    run: ?*const fn (self: *Command) anyerror!void = run,
 
     // optional hooks to attach to the locations at parse/run time
     // see hooks.zig for more.
     hooks: ?*Hooks = null,
 
     // custom help string generator. owner must deallocate the returned memory!
-    help: *const fn (cmd: Self) anyerror![]const u8 = help,
+    help: *const fn (cmd: Command) anyerror![]const u8 = help,
 
     // computed argument count limits during parse step.
     // DO NOT set this attribute directly
@@ -173,13 +171,13 @@ pub const Command = struct {
     // DO NOT set this attribute directly
     seek_help: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator, name: []const u8) Self {
-        return Self{
+    pub fn init(allocator: std.mem.Allocator, name: []const u8) Command {
+        return Command{
             .allocator = allocator,
             .name = name,
         };
     }
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Command) void {
         if (self.args) |args| args.deinit();
         if (self.options) |options| options.deinit();
         if (self.commands) |subs| {
@@ -188,7 +186,7 @@ pub const Command = struct {
         }
     }
 
-    pub fn start(self: *Self) !void {
+    pub fn start(self: *Command) !void {
         if (!self.root) return Error.NotRootCommand;
 
         if (self.seek_help) {
@@ -200,12 +198,12 @@ pub const Command = struct {
         }
     }
 
-    pub fn parseAndStart(self: *Self) !void {
+    pub fn parseAndStart(self: *Command) !void {
         try self.parse();
         try self.start();
     }
 
-    pub fn reset(self: *Self) void {
+    pub fn reset(self: *Command) void {
         self.n_args = null;
         self.active = false;
         self.root = true;
@@ -215,7 +213,7 @@ pub const Command = struct {
 
     // arguments
 
-    pub fn setNArgs(self: *Self) !void {
+    pub fn setNArgs(self: *Command) !void {
         const nargs = self.nargs orelse {
             self.n_args = .{ .lower = 0, .upper = 0 };
             return;
@@ -239,7 +237,7 @@ pub const Command = struct {
         }
     }
 
-    fn addArgument(self: *Self, argument: []const u8) !void {
+    fn addArgument(self: *Command, argument: []const u8) !void {
         self.args = self.args orelse std.ArrayList([]const u8).init(self.allocator);
 
         if (self.n_args.?.upper) |upper| if (self.args.?.items.len >= upper)
@@ -260,7 +258,7 @@ pub const Command = struct {
         try self.options.?.appendSlice(options);
     }
 
-    pub fn getOption(self: Self, name: []const u8) ?*Option {
+    pub fn getOption(self: *Command, name: []const u8) ?*Option {
         const options = self.options orelse return null;
 
         for (options.items) |*o| if (utils.contains([]const u8, o.names, name)) return o;
@@ -268,7 +266,7 @@ pub const Command = struct {
         return null;
     }
 
-    pub fn getFlag(self: Self, name: []const u8) ?*Option {
+    pub fn getFlag(self: *Command, name: []const u8) ?*Option {
         const options = self.options orelse return null;
 
         for (options.items) |*o| if (o.is_flag and utils.contains([]const u8, o.names, name)) return o;
@@ -276,52 +274,52 @@ pub const Command = struct {
         return null;
     }
 
-    fn computeOptions(self: *Self) !void {
+    fn computeOptions(self: *Command) !void {
         if (self.options) |ops| for (ops.items) |*o| try o.compute();
         if (self.commands) |subs| for (subs.items) |*s| try s.computeOptions();
     }
 
     // subcommands
 
-    pub fn getCommand(self: Command, name: []const u8) ?*Command {
+    pub fn getCommand(self: *Command, name: []const u8) ?*Command {
         if (self.commands) |subs| for (subs.items) |*s| if (std.mem.eql(u8, s.name, name)) return s;
         return null;
     }
 
     pub fn addCommand(self: *Command, command: Command) !void {
-        self.commands = self.commands orelse std.ArrayList(Self).init(self.allocator);
+        self.commands = self.commands orelse std.ArrayList(Command).init(self.allocator);
         var c = command;
         c.root = false;
         c.parent = self;
         try self.commands.?.append(c);
     }
 
-    pub fn getActiveCommand(self: Self) ?*Self {
+    pub fn getActiveCommand(self: *Command) ?*Command {
         if (self.commands) |subs| for (subs.items) |*s| if (s.active) return s;
         return null;
     }
 
     // hooks
 
-    pub fn initHooks(self: *Self) !void {
+    pub fn initHooks(self: *Command) !void {
         self.hooks = try Hooks.init(self.allocator);
     }
 
-    pub fn deinitHooks(self: *Self) void {
+    pub fn deinitHooks(self: *Command) void {
         if (self.hooks) |h| h.deinit();
     }
 
-    pub fn addHook(self: *Self, loc: Hooks.Location, hook: Hook) !void {
+    pub fn addHook(self: *Command, loc: Hooks.Location, hook: Hook) !void {
         if (self.hooks) |h| try h.add(loc, hook);
     }
 
-    pub fn runHooks(self: *Self, loc: Hooks.Location) !void {
+    pub fn runHooks(self: *Command, loc: Hooks.Location) !void {
         if (self.hooks) |h| try h.run(loc, self);
     }
 
     // validations
 
-    pub fn validateUniqueSubCommandName(self: Self) !void {
+    pub fn validateUniqueSubCommandName(self: Command) !void {
         const subs = self.commands orelse return;
         var names = try self.allocator.alloc([]const u8, subs.items.len);
         defer self.allocator.free(names);
@@ -331,7 +329,7 @@ pub const Command = struct {
         if (utils.hasDuplicate([][]const u8, names)) return Error.DublicateSubCommand;
     }
 
-    pub fn validateNargs(self: Self) !void {
+    pub fn validateNargs(self: Command) !void {
         const nargs = self.nargs orelse return;
 
         if (std.mem.eql(u8, nargs, "*")) {
@@ -347,7 +345,7 @@ pub const Command = struct {
         }
     }
 
-    pub fn validateUniqueOptionName(self: Self) !void {
+    pub fn validateUniqueOptionName(self: Command) !void {
         const opts = self.options orelse return;
 
         var m = std.StringHashMap(u8).init(self.allocator);
@@ -357,17 +355,17 @@ pub const Command = struct {
             return Error.DuplicateOptionName;
     }
 
-    pub fn validateParameters(self: Self) anyerror!void {
+    pub fn validateParameters(self: Command) anyerror!void {
         try self.validateNargs();
         try self.validateUniqueOptionName();
         try self.validateUniqueSubCommandName();
     }
 
-    fn seekHelp(self: Self) !void {
+    fn seekHelp(self: Command) !void {
         if (self.getActiveCommand()) |a| try seekHelp(a.*) else try self.print();
     }
 
-    pub fn print(self: Self) !void {
+    pub fn print(self: Command) !void {
         if (builtin.is_test) return;
 
         const content = try self.help(self);
@@ -375,7 +373,7 @@ pub const Command = struct {
         std.debug.print("\n{s}\n", .{content});
     }
 
-    pub fn prepare(self: *Self) !void {
+    pub fn prepare(self: *Command) !void {
         self.reset();
 
         try self.validateParameters();
@@ -384,7 +382,7 @@ pub const Command = struct {
         self.active = true;
     }
 
-    pub fn parse(self: *Self) !void {
+    pub fn parse(self: *Command) !void {
         var it = try std.process.argsWithAllocator(self.allocator);
         var items = std.ArrayList([]const u8).init(self.allocator);
         defer items.deinit();
@@ -397,7 +395,7 @@ pub const Command = struct {
         };
     }
 
-    pub fn parseSlice(self: *Self, arguments: ?[]const []const u8) !void {
+    pub fn parseSlice(self: *Command, arguments: ?[]const []const u8) !void {
         var state = State.void;
         var partial: ?*Option = null;
 
@@ -418,7 +416,7 @@ pub const Command = struct {
 
             if (token.isHelp()) {
                 self.seek_help = true;
-                var p: ?*Self = self.parent;
+                var p: ?*Command = self.parent;
                 while (p != null) : (p = p.?.parent) p.?.seek_help = true;
                 return;
             }
@@ -483,7 +481,7 @@ pub const Command = struct {
 
     // convenience
 
-    pub fn desc(self: Self) []const u8 {
+    pub fn desc(self: Command) []const u8 {
         return self.description orelse "";
     }
 };
