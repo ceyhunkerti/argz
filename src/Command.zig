@@ -4,7 +4,10 @@ const std = @import("std");
 const mem = std.mem;
 const Option = @import("Option.zig");
 
-const Error = error{ArgumentCountOverflow};
+const Error = error{
+    ArgumentCountOverflow,
+    CommandNotExpectingArguments,
+};
 
 allocator: std.mem.Allocator,
 
@@ -26,17 +29,9 @@ commands: ?std.ArrayList(Command) = null,
 // DO NOT set it directly
 _args: ?std.ArrayList([]const u8) = null,
 
-// *    : zero or more arguments
-// n    : exactly n arguments. n is an unsigned integer
-// n..  : n or more arguments.
-// ..n  : up to n arguments, inclusive
-// n..m : between n and m arguments, inclusive. m is and unsigned integer
-// null : (default) same as zero arguments
-nargs: ?[]const u8 = null,
-
 // computed argument count limits during parse step.
 // DO NOT set this attribute directly
-_nargs: ?struct { lower: ?u8 = null, upper: ?u8 = null } = null,
+number_of_arguments: struct { lower: ?u8 = null, upper: ?u8 = null } = .{},
 
 // custom validation function for this command
 validation: ?*const fn (self: Command) anyerror!void = null,
@@ -56,12 +51,14 @@ pub fn init(allocator: std.mem.Allocator, name: []const u8, runner: *const fn (s
         .runner = runner,
     };
 }
+
 pub fn deinit(self: *Command) void {
     if (self.options) |options| {
         for (options.items) |option| self.allocator.destroy(option);
         options.deinit();
     }
     if (self.commands) |commands| commands.deinit();
+    if (self._args) |args| args.deinit();
 }
 
 pub fn run(self: *Command) anyerror!i32 {
@@ -104,11 +101,15 @@ pub fn findSubCommand(self: *Command, name: []const u8) ?*Command {
 }
 
 pub fn addArgument(self: *Command, argument: []const u8) !void {
+    if (self.number_of_arguments.lower == 0) {
+        return Error.CommandNotExpectingArguments;
+    }
+
     if (self._args == null) {
         self._args = std.ArrayList([]const u8).init(self.allocator);
     }
 
-    if (self._nargs.?.upper) |upper| if (self._args.?.items.len >= upper)
+    if (self.number_of_arguments.upper) |upper| if (self._args.?.items.len >= upper)
         return error.ArgumentCountOverflow;
 
     try self._args.?.append(argument);

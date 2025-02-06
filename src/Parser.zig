@@ -34,11 +34,14 @@ fn parse(self: *Parser, args: []const []const u8) !Result {
         var token = Token.init(self.allocator, arg);
         try token.parse();
         if (token.isHelp()) return .Help;
+
         if (token.isOption() and self.state == .expecting_value) {
+            std.debug.print("\n arg: {s}\n", .{arg});
             return error.ParseErrorExpectingValue;
         }
-        std.debug.print("\n arg: {s}\n", .{arg});
+        std.debug.print("\narg: {s}\n", .{arg});
         if (token.isOption() and !token.isChained()) {
+            std.debug.print("\n {s} is option\n", .{arg});
             if (self.findOption(try token.key())) |option| {
                 if (option.is_flag) try option.set("true");
                 if (token.isKeyValue()) {
@@ -66,10 +69,12 @@ fn parse(self: *Parser, args: []const []const u8) !Result {
                 }
             }
         } else if (token.isAtom()) {
+            std.debug.print("\n {s} is atom\n", .{arg});
             if (option_waiting_value) |option| {
                 try option.set(try token.key());
                 option_waiting_value = null;
                 self.state = .void;
+                std.debug.print("\nstate reset\n", .{});
             } else if (self.command.findSubCommand(try token.key())) |sub| {
                 self.command = sub;
                 if (arg_index < args.len - 1) {
@@ -95,15 +100,20 @@ test "Parser.parse" {
 
     cmd.allow_unknown_options = true;
     var parser = Parser.init(allocator, &cmd);
-    const res = try parse(&parser, &.{ "-o", "v", "--o1=v1", "--help" });
-    try std.testing.expectEqual(res, .Help);
+    const p1 = try parse(&parser, &.{ "-o", "v", "--o1=v1", "--help" });
+    try std.testing.expectEqual(.Help, p1);
+    try std.testing.expectError(Error.InvalidShortOption, parse(&parser, &.{ "-abc=value", "--o1=v1" }));
+    try std.testing.expectEqual(.Help, try parse(&parser, &.{ "-o", "v", "--o1=v1", "arg1", "arg2", "--help" }));
+    cmd.number_of_arguments.lower = 0;
+    try std.testing.expectError(error.CommandNotExpectingArguments, parse(&parser, &.{ "-o", "v", "--o1=v1", "arg1", "arg2", "--help" }));
+    cmd.number_of_arguments.lower = null;
 
-    std.debug.print("\nOptionCpount: {d}\n", .{cmd.options.?.items.len});
-    if (cmd.options) |options| {
-        for (options.items) |option| {
-            std.debug.print("\no{s} {any}\n", .{ option.names[0], option.get() });
-        }
-    }
+    // std.debug.print("\nOptionCpount: {d}\n", .{cmd.options.?.items.len});
+    // if (cmd.options) |options| {
+    //     for (options.items) |option| {
+    //         std.debug.print("\no{s} {any}\n", .{ option.names[0], option.get() });
+    //     }
+    // }
 }
 
 fn findOption(self: Parser, name: []const u8) ?*Option {

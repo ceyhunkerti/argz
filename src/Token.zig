@@ -2,7 +2,13 @@ const std = @import("std");
 const mem = std.mem;
 const Token = @This();
 
-pub const Error = error{ TokenHasNoValue, TokenIsKeyValue, TokenHasNoKey };
+pub const Error = error{
+    TokenHasNoValue,
+    TokenIsKeyValue,
+    TokenHasNoKey,
+    InvalidShortOption,
+    InvalidEqualPosition,
+};
 
 pub const Dash = enum {
     single_dash,
@@ -36,7 +42,6 @@ pub fn parse(self: *Token) !void {
         self._dash = .double_dash;
         str = self.content[2..];
     } else if (mem.startsWith(u8, self.content, "-")) {
-        std.debug.print("\nsingle\n", .{});
         self._dash = .single_dash;
         str = self.content[1..];
     } else {
@@ -44,11 +49,22 @@ pub fn parse(self: *Token) !void {
     }
 
     if (str) |s| {
-        if (std.mem.indexOf(u8, s, "=")) |idx| {
+        if (quoteEnclosed(s)) {
             // "some=thing"
-            if (!quoteEnclosed(s)) {
-                self._key = s[0..idx];
-                self._value = s[idx + 1 ..];
+            self._key = s;
+        } else if (self.hasDash()) {
+            // std.debug.print("\n{s} hash-dash\n", .{s});
+            if (std.mem.indexOf(u8, s, "=")) |idx| {
+                //
+                if (idx == 0) {
+                    // --=abc, -=abc
+                    return Error.InvalidEqualPosition;
+                } else {
+                    self._key = s[0..idx];
+                }
+                if (idx < s.len - 1) {
+                    self._value = s[idx + 1 ..];
+                }
             } else {
                 self._key = s;
             }
@@ -56,6 +72,14 @@ pub fn parse(self: *Token) !void {
             self._key = s;
         }
     }
+
+    // validate
+    if (self._dash) |d| if (self._key) |k| if (self._value != null) {
+        if (d == .single_dash and k.len > 1) {
+            // -abc=something is not valid it should be a long option --abc=something
+            return Error.InvalidShortOption;
+        }
+    };
 }
 
 fn quoteEnclosed(content: []const u8) bool {
@@ -95,5 +119,28 @@ pub fn isKeyValue(self: Token) bool {
 }
 
 pub fn isAtom(self: Token) bool {
+    // std.debug.print("\n dash: {any} key: {any} value: {any}\n", .{
+    //     self._dash,
+    //     self._key,
+    //     self._value,
+    // });
     return self._dash == null and self._key != null and self._value == null;
+}
+
+pub fn isEqual(self: Token) bool {
+    if (self._key) |k| return k.len == 1 and k[0] == '=';
+    return false;
+}
+
+pub fn hasSingleDash(self: Token) bool {
+    if (self._dash) |d| return d == .single_dash;
+    return false;
+}
+
+pub fn hasDoubleDash(self: Token) bool {
+    if (self._dash) |d| return d == .double_dash;
+}
+
+pub fn hasDash(self: Token) bool {
+    return self._dash != null;
 }
