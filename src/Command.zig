@@ -57,7 +57,10 @@ pub fn init(allocator: std.mem.Allocator, name: []const u8, runner: *const fn (s
     };
 }
 pub fn deinit(self: *Command) void {
-    if (self.options) |options| options.deinit();
+    if (self.options) |options| {
+        for (options.items) |option| self.allocator.destroy(option);
+        options.deinit();
+    }
     if (self.commands) |commands| commands.deinit();
 }
 

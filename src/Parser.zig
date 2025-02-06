@@ -102,7 +102,6 @@ test "Parser.parse" {
     if (cmd.options) |options| {
         for (options.items) |option| {
             std.debug.print("\no{s} {any}\n", .{ option.names[0], option.get() });
-            allocator.destroy(option);
         }
     }
 }
