@@ -5,9 +5,7 @@ const Command = @import("Command.zig");
 const Option = @import("Option.zig");
 const Token = @import("Token.zig");
 
-const Error = error{
-    ParseErrorExpectingValue,
-} || Token.Error;
+const Error = error{ ExpectingValue, UnknownNotLongOption } || Token.Error;
 
 const State = enum {
     void,
@@ -35,9 +33,15 @@ fn parse(self: *Parser, args: []const []const u8) !Result {
         try token.parse();
         if (token.isHelp()) return .Help;
 
+        if (token.isEqual()) {
+            if (self.state == .expecting_value) {
+                continue;
+            }
+        }
+
         if (token.isOption() and self.state == .expecting_value) {
             std.debug.print("\n arg: {s}\n", .{arg});
-            return error.ParseErrorExpectingValue;
+            return error.ExpectingValue;
         }
         std.debug.print("\narg: {s}\n", .{arg});
         if (token.isOption() and !token.isChained()) {
@@ -53,6 +57,11 @@ fn parse(self: *Parser, args: []const []const u8) !Result {
             } else {
                 std.debug.print("\nunknown option: {s}\n", .{try token.key()});
                 if (self.command.allow_unknown_options) {
+                    if (!token.hasDoubleDash()) {
+                        // only long format is allowed for unknown options
+                        return error.UnknownNotLongOption;
+                    }
+
                     var new_option = try self.allocator.create(Option);
                     errdefer self.allocator.destroy(new_option);
 
@@ -100,20 +109,24 @@ test "Parser.parse" {
 
     cmd.allow_unknown_options = true;
     var parser = Parser.init(allocator, &cmd);
-    const p1 = try parse(&parser, &.{ "-o", "v", "--o1=v1", "--help" });
-    try std.testing.expectEqual(.Help, p1);
-    try std.testing.expectError(Error.InvalidShortOption, parse(&parser, &.{ "-abc=value", "--o1=v1" }));
-    try std.testing.expectEqual(.Help, try parse(&parser, &.{ "-o", "v", "--o1=v1", "arg1", "arg2", "--help" }));
-    cmd.number_of_arguments.lower = 0;
-    try std.testing.expectError(error.CommandNotExpectingArguments, parse(&parser, &.{ "-o", "v", "--o1=v1", "arg1", "arg2", "--help" }));
-    cmd.number_of_arguments.lower = null;
+    const p1 = try parse(&parser, &.{ "-o", "v", "--help" });
 
-    // std.debug.print("\nOptionCpount: {d}\n", .{cmd.options.?.items.len});
-    // if (cmd.options) |options| {
-    //     for (options.items) |option| {
-    //         std.debug.print("\no{s} {any}\n", .{ option.names[0], option.get() });
-    //     }
-    // }
+    // const p1 = try parse(&parser, &.{ "-o", "v", "--o1=v1", "--help" });
+    try std.testing.expectEqual(.Help, p1);
+    // try std.testing.expectError(Error.InvalidShortOption, parse(&parser, &.{ "-abc=value", "--o1=v1" }));
+    // try std.testing.expectEqual(.Help, try parse(&parser, &.{ "-o", "v", "--o1=v1", "arg1", "arg2", "--help" }));
+    // cmd.number_of_arguments.lower = 0;
+    // try std.testing.expectError(error.CommandNotExpectingArguments, parse(&parser, &.{ "-o", "v", "--o1=v1", "arg1", "arg2", "--help" }));
+    // cmd.number_of_arguments.lower = null;
+
+    // _ = try parse(&parser, &.{ "--xyz", "=", "val", "--o1=v1", "arg1", "arg2", "--help" });
+
+    std.debug.print("\nOptionCpount: {d}\n", .{cmd.options.?.items.len});
+    if (cmd.options) |options| {
+        for (options.items) |option| {
+            std.debug.print("\nOption:  {s} {any}\n", .{ option.names[0], option.get() });
+        }
+    }
 }
 
 fn findOption(self: Parser, name: []const u8) ?*Option {

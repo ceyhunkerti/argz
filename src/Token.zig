@@ -119,11 +119,6 @@ pub fn isKeyValue(self: Token) bool {
 }
 
 pub fn isAtom(self: Token) bool {
-    // std.debug.print("\n dash: {any} key: {any} value: {any}\n", .{
-    //     self._dash,
-    //     self._key,
-    //     self._value,
-    // });
     return self._dash == null and self._key != null and self._value == null;
 }
 
@@ -139,6 +134,7 @@ pub fn hasSingleDash(self: Token) bool {
 
 pub fn hasDoubleDash(self: Token) bool {
     if (self._dash) |d| return d == .double_dash;
+    return false;
 }
 
 pub fn hasDash(self: Token) bool {
