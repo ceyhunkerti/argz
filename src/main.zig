@@ -15,6 +15,10 @@ pub const ValueType = opt.ValueType;
 pub const Hook = hooks.Hook;
 pub const Hooks = hooks.Hooks;
 
+pub const Option2 = @import("Option.zig");
+pub const Command2 = @import("Command.zig");
+pub const Parser2 = @import("Parser.zig");
+
 test "all" {
     testing.refAllDecls(@This());
 }

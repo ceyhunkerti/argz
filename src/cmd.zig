@@ -15,7 +15,7 @@ pub const Error = error{
     ArgumentCountOverflow,
     DuplicateCommandName,
     DuplicateOptionName,
-    DublicateSubCommand,
+    DuplicateSubCommand,
     InvalidArgumentCountSpec,
     NotRootCommand,
     ParseError,
@@ -328,7 +328,7 @@ pub const Command = struct {
 
         for (subs.items, 0..) |s, i| names[i] = s.name;
 
-        if (utils.hasDuplicate([][]const u8, names)) return Error.DublicateSubCommand;
+        if (utils.hasDuplicate([][]const u8, names)) return Error.DuplicateSubCommand;
     }
 
     pub fn validateNargs(self: Self) !void {
@@ -533,7 +533,7 @@ test "Command.validateUniqueSubCommandName" {
     const s2 = Command.init(testing.allocator, "s");
     try command.addCommand(s2);
 
-    try testing.expectError(Error.DublicateSubCommand, command.validateUniqueSubCommandName());
+    try testing.expectError(Error.DuplicateSubCommand, command.validateUniqueSubCommandName());
 }
 
 test "Command.validateUniqueOptionName" {
