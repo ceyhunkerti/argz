@@ -13,14 +13,14 @@ const ArgumentValue = union(ArgumentType) {
 
 pub const Arguments = struct {
     type: ArgumentType = .String,
-    min_count: ?u8 = null,
-    max_count: ?u8 = null,
+    min_count: u8 = 0,
+    max_count: u8 = std.math.maxInt(u8),
     _values: ?std.ArrayList(ArgumentValue) = null,
 
-    pub fn deinit(self: Arguments) void {
+    pub fn deinit(self: Arguments, allocator: std.mem.Allocator) void {
         if (self._values) |vals| {
             for (vals.items) |v| switch (v) {
-                .String => self.allocator.free(v.String),
+                .String => allocator.free(v.String),
                 else => {},
             };
             vals.deinit();
@@ -63,12 +63,9 @@ commands: ?std.ArrayList(Command) = null,
 // DO NOT set this attribute directly
 // number_of_arguments: struct { lower: ?u8 = null, upper: ?u8 = null } = .{},
 
-arguments: struct {
-    type: ArgumentType = .String,
-    min_count: ?u8 = null,
-    max_count: ?u8 = null,
-    _values: ?std.ArrayList(ArgumentValue) = null,
-} = .{},
+// null means we don't want arguments
+// initialize it with arguments if you accept arguments
+arguments: ?Arguments = null,
 
 // custom validation function for this command
 validation: ?*const fn (self: Command) anyerror!void = null,
@@ -80,6 +77,10 @@ runner: *const fn (self: *Command) anyerror!i32,
 helpgen: ?*const fn (cmd: Command) anyerror![]const u8 = null,
 
 allow_unknown_options: bool = false,
+
+// computed at the parse time.
+// DO NOT set this attribute directly
+_active: bool = false,
 
 pub fn init(allocator: std.mem.Allocator, name: []const u8, runner: *const fn (self: *Command) anyerror!i32) Command {
     return Command{
@@ -97,7 +98,7 @@ pub fn deinit(self: Command) void {
         }
         options.deinit();
     }
-    if (self._args) |args| args.deinit();
+    if (self.arguments) |args| args.deinit(self.allocator);
     if (self.commands) |commands| {
         for (commands.items) |command| command.deinit();
         commands.deinit();
@@ -168,16 +169,19 @@ pub fn findSubCommand(self: *Command, name: []const u8) ?*Command {
 }
 
 pub fn addArgument(self: *Command, argument: []const u8) !void {
-    if (self.number_of_arguments.lower == 0) {
+    if (self.arguments) |*args| {
+        if (args._values == null) {
+            args._values = std.ArrayList(ArgumentValue).init(self.allocator);
+        }
+        if (args._values.?.items.len == args.max_count) {
+            return error.ArgumentCountOverflow;
+        }
+        switch (args.type) {
+            .String => try args._values.?.append(ArgumentValue{ .String = try self.allocator.dupe(u8, argument) }),
+            .Integer => try args._values.?.append(ArgumentValue{ .Integer = try std.fmt.parseInt(i32, argument, 10) }),
+            .Boolean => try args._values.?.append(ArgumentValue{ .Boolean = std.mem.eql(u8, argument, "true") }),
+        }
+    } else {
         return Error.CommandNotExpectingArguments;
     }
-
-    if (self._args == null) {
-        self._args = std.ArrayList([]const u8).init(self.allocator);
-    }
-
-    if (self.number_of_arguments.upper) |upper| if (self._args.?.items.len >= upper)
-        return error.ArgumentCountOverflow;
-
-    try self._args.?.append(argument);
 }

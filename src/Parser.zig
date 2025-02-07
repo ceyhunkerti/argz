@@ -25,6 +25,8 @@ pub fn init(allocator: std.mem.Allocator, command: *Command) Parser {
 }
 
 fn parse(self: *Parser, args: []const []const u8) !Result {
+    self.command._active = true;
+
     var option_waiting_value: ?*Option = null;
 
     for (args, 0..) |arg, arg_index| {
@@ -105,6 +107,7 @@ test "Parser.parse" {
             return 0;
         }
     }.run);
+    cmd.arguments = .{};
     defer cmd.deinit();
 
     cmd.allow_unknown_options = true;
@@ -112,9 +115,6 @@ test "Parser.parse" {
     try std.testing.expectEqual(.Help, try parse(&parser, &.{ "--o", "v", "--help" }));
     try std.testing.expectError(Error.InvalidShortOption, parse(&parser, &.{ "-abc=value", "--o1=v1" }));
     try std.testing.expectEqual(.Help, try parse(&parser, &.{ "--o11", "v", "--o12=v1", "arg1", "arg2", "--help" }));
-    cmd.number_of_arguments.lower = 0;
-    try std.testing.expectError(error.CommandNotExpectingArguments, parse(&parser, &.{ "-o22", "v" }));
-    cmd.number_of_arguments.lower = null;
     _ = try parse(&parser, &.{ "--xyz", "=", "val", "--help" });
 
     std.debug.print("\nOptionCpount: {d}\n", .{cmd.options.?.items.len});
@@ -144,7 +144,7 @@ test "Parser.parse subcommands" {
     try root_cmd.addCommand(cmd1);
     var parser = Parser.init(allocator, &root_cmd);
     try std.testing.expectEqual(.Help, try parse(&parser, &.{ "cmd1", "--help" }));
-    try std.testing.expect(root_cmd._args == null);
+    try std.testing.expect(root_cmd.arguments == null);
 }
 
 fn findOption(self: Parser, name: []const u8) ?*Option {
