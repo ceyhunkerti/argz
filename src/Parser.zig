@@ -64,7 +64,8 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                         // only long format is allowed for unknown options
                         return error.UnknownNotLongOption;
                     }
-                    var new_option = try Option.init(self.allocator, Option.ValueType.String, &.{try token.key()});
+                    var new_option = try Option.init(self.allocator, Option.ValueType.String, &.{try token.key()}, "Unknown option");
+                    new_option._is_unknown_option = true;
 
                     errdefer {
                         new_option.deinit();

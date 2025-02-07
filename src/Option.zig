@@ -34,6 +34,7 @@ names: std.ArrayList([]const u8) = undefined,
 
 comptime default: ?Value = null,
 
+// it's owned by the option and managed inside this.
 description: ?[]const u8 = null,
 
 // different than bool type, does not require a value.
@@ -47,11 +48,12 @@ validation: ?*const fn (self: Option) anyerror!void = null,
 // You can also use isUnknown() to check if an option is unknown in your app.
 _is_unknown_option: bool = false,
 
-pub fn init(allocator: mem.Allocator, value_type: ValueType, names: []const []const u8) !*Option {
+pub fn init(allocator: mem.Allocator, value_type: ValueType, names: []const []const u8, description: ?[]const u8) !*Option {
     var option = try allocator.create(Option);
     option.* = .{
         .allocator = allocator,
         .value_type = value_type,
+        .description = if (description) |d| try allocator.dupe(u8, d) else null,
     };
     option.names = std.ArrayList([]const u8).init(allocator);
     for (names) |name| {
@@ -67,6 +69,7 @@ pub fn deinit(self: Option) void {
         .String => |v| self.allocator.free(v),
         else => {},
     }
+    if (self.description) |d| self.allocator.free(d);
 }
 
 pub fn destroy(o: *Option) void {
@@ -105,10 +108,8 @@ pub fn help(self: Option) ![]const u8 {
 
 test "Option.help" {
     const allocator = std.testing.allocator;
-    var o = try Option.init(allocator, ValueType.String, &[_][]const u8{ "o", "option" });
+    var o = try Option.init(allocator, ValueType.String, &[_][]const u8{ "o", "option" }, "my option description");
     defer Option.destroy(o);
-
-    o.description = "my option description";
 
     const s = try o.help();
     defer allocator.free(s);
@@ -131,26 +132,26 @@ pub fn set(self: *Option, value: []const u8) !void {
 }
 test "Option.set" {
     const allocator = std.testing.allocator;
-    var o1 = try Option.init(allocator, ValueType.String, &[_][]const u8{ "o", "option" });
+    var o1 = try Option.init(allocator, ValueType.String, &[_][]const u8{ "o", "option" }, null);
     defer Option.destroy(o1);
     try o1.set("value");
     try testing.expectEqualStrings("value", o1.getString());
 
-    var o2 = try Option.init(allocator, ValueType.Integer, &[_][]const u8{ "o", "option" });
+    var o2 = try Option.init(allocator, ValueType.Integer, &[_][]const u8{ "o", "option" }, null);
     defer Option.destroy(o2);
 
     try o2.set("10");
     try testing.expectEqual(Value{ .Integer = 10 }, o2.get());
     try testing.expectEqual(o2.getInt(), 10);
 
-    var o3 = try Option.init(allocator, ValueType.Boolean, &[_][]const u8{ "o", "option" });
+    var o3 = try Option.init(allocator, ValueType.Boolean, &[_][]const u8{ "o", "option" }, null);
     defer Option.destroy(o3);
 
     try o3.set("true");
     try testing.expectEqual(Value{ .Boolean = true }, o3.get());
     try testing.expectEqual(o3.getBoolean(), true);
 
-    var o4 = try Option.init(allocator, ValueType.Integer, &[_][]const u8{ "o", "option" });
+    var o4 = try Option.init(allocator, ValueType.Integer, &[_][]const u8{ "o", "option" }, null);
     defer Option.destroy(o4);
 
     try o4.set("20");

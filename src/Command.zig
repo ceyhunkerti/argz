@@ -239,7 +239,6 @@ pub fn findSubCommand(self: *Command, name: []const u8) ?*Command {
 
 // Adds arguments to this command.
 pub fn addArgument(self: *Command, argument: []const u8) !void {
-    std.debug.print("\n adding arg {s} \n", .{argument});
     if (self.arguments) |*args| {
         if (args._values == null) {
             args._values = std.ArrayList(ArgumentValue).init(self.allocator);
