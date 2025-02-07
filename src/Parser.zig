@@ -133,6 +133,7 @@ test "Parser.parse subcommands" {
             return 0;
         }
     }.run);
+    defer root_cmd.deinit();
 
     const cmd1 = Command.init(allocator, "cmd1", struct {
         fn run(self: *Command) anyerror!i32 {
@@ -141,6 +142,9 @@ test "Parser.parse subcommands" {
         }
     }.run);
     try root_cmd.addCommand(cmd1);
+    var parser = Parser.init(allocator, &root_cmd);
+    try std.testing.expectEqual(.Help, try parse(&parser, &.{ "cmd1", "--help" }));
+    try std.testing.expect(root_cmd._args == null);
 }
 
 fn findOption(self: Parser, name: []const u8) ?*Option {
