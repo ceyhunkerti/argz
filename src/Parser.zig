@@ -65,7 +65,7 @@ fn parse(self: *Parser, args: []const []const u8) !Result {
                     var new_option = try self.allocator.create(Option);
                     errdefer self.allocator.destroy(new_option);
 
-                    new_option.* = Option.init(Option.ValueType.String, &.{try token.key()});
+                    new_option.* = Option.init(self.allocator, Option.ValueType.String, &.{try token.key()});
 
                     if (token.isKeyValue()) {
                         try new_option.set(try token.value());
@@ -109,12 +109,9 @@ test "Parser.parse" {
 
     cmd.allow_unknown_options = true;
     var parser = Parser.init(allocator, &cmd);
-    const p1 = try parse(&parser, &.{ "-o", "v", "--help" });
-
-    // const p1 = try parse(&parser, &.{ "-o", "v", "--o1=v1", "--help" });
-    try std.testing.expectEqual(.Help, p1);
-    // try std.testing.expectError(Error.InvalidShortOption, parse(&parser, &.{ "-abc=value", "--o1=v1" }));
-    // try std.testing.expectEqual(.Help, try parse(&parser, &.{ "-o", "v", "--o1=v1", "arg1", "arg2", "--help" }));
+    try std.testing.expectEqual(.Help, try parse(&parser, &.{ "--o", "v", "--help" }));
+    try std.testing.expectError(Error.InvalidShortOption, parse(&parser, &.{ "-abc=value", "--o1=v1" }));
+    try std.testing.expectEqual(.Help, try parse(&parser, &.{ "--o11", "v", "--o12=v1", "arg1", "arg2", "--help" }));
     // cmd.number_of_arguments.lower = 0;
     // try std.testing.expectError(error.CommandNotExpectingArguments, parse(&parser, &.{ "-o", "v", "--o1=v1", "arg1", "arg2", "--help" }));
     // cmd.number_of_arguments.lower = null;
@@ -124,7 +121,7 @@ test "Parser.parse" {
     std.debug.print("\nOptionCpount: {d}\n", .{cmd.options.?.items.len});
     if (cmd.options) |options| {
         for (options.items) |option| {
-            std.debug.print("\nOption:  {s} {any}\n", .{ option.names[0], option.get() });
+            std.debug.print("\nOption:  {s} {any}\n", .{ option.names.items[0], option.get() });
         }
     }
 }

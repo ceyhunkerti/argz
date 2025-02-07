@@ -7,6 +7,7 @@ const Option = @import("Option.zig");
 const Error = error{
     ArgumentCountOverflow,
     CommandNotExpectingArguments,
+    MultiOptionIsNotSupported,
 };
 
 allocator: std.mem.Allocator,
@@ -54,7 +55,10 @@ pub fn init(allocator: std.mem.Allocator, name: []const u8, runner: *const fn (s
 
 pub fn deinit(self: *Command) void {
     if (self.options) |options| {
-        for (options.items) |option| self.allocator.destroy(option);
+        for (options.items) |option| {
+            option.deinit();
+            self.allocator.destroy(option);
+        }
         options.deinit();
     }
     if (self.commands) |commands| commands.deinit();
@@ -91,8 +95,21 @@ pub fn parse(self: *Command) !void {
 pub fn addOption(self: *Command, option: *Option) !void {
     if (self.options == null) {
         self.options = std.ArrayList(*Option).init(self.allocator);
+    } else {
+        if (self.findOption(option.names.items) != null) {
+            return error.MultiOptionIsNotSupported;
+        }
     }
     try self.options.?.append(option);
+}
+
+pub fn findOption(self: *Command, names: []const []const u8) ?*Option {
+    if (self.options) |options| {
+        for (options.items) |option| {
+            for (names) |name| if (mem.eql(u8, option.names.items[0], name)) return option;
+        }
+    }
+    return null;
 }
 
 pub fn findSubCommand(self: *Command, name: []const u8) ?*Command {
