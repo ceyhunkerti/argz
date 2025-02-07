@@ -264,7 +264,6 @@ pub fn argumentValues(self: Command) ?[]ArgumentValue {
 }
 
 // Prints the help for this command
-// todo
 pub fn printHelp(self: *Command) !void {
     if (self.helpgen) |helpgen| {
         const help = try helpgen(self.*);
