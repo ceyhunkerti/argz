@@ -5,7 +5,12 @@ const Command = @import("Command.zig");
 const Option = @import("Option.zig");
 const Token = @import("Token.zig");
 
-pub const Error = error{ ExpectingValue, UnknownNotLongOption, UnknownOption } || Token.Error;
+pub const Error = error{
+    ExpectingValue,
+    UnknownNotLongOption,
+    UnknownOption,
+    FailedToParseChainedOptions,
+} || Token.Error;
 
 const State = enum {
     void,
@@ -45,7 +50,7 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
         if (token.isOption() and self.state == .expecting_value) {
             return error.ExpectingValue;
         }
-        if (token.isOption() and !token.isChained()) {
+        if (token.isUnchainedOption()) {
             if (self.findOption(try token.key())) |option| {
                 if (option.is_flag) {
                     try option.set("true");
@@ -81,6 +86,18 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                     try self.command.addOption(new_option);
                 } else {
                     std.debug.print("Unknown option: {s}\n", .{arg});
+                    return error.UnknownOption;
+                }
+            }
+        } else if (token.isChainedOption()) {
+            for (try token.key()) |char| {
+                if (self.findOption(&[_]u8{char})) |option| {
+                    if (!option.is_flag) {
+                        return error.FailedToParseChainedOptions;
+                    } else {
+                        try option.set("true");
+                    }
+                } else {
                     return error.UnknownOption;
                 }
             }
