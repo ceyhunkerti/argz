@@ -4,6 +4,34 @@ const std = @import("std");
 const mem = std.mem;
 const Option = @import("Option.zig");
 
+const ArgumentType = enum { String, Integer, Boolean };
+const ArgumentValue = union(ArgumentType) {
+    String: []const u8,
+    Integer: i32,
+    Boolean: bool,
+};
+
+pub const Arguments = struct {
+    type: ArgumentType = .String,
+    min_count: ?u8 = null,
+    max_count: ?u8 = null,
+    _values: ?std.ArrayList(ArgumentValue) = null,
+
+    pub fn deinit(self: Arguments) void {
+        if (self._values) |vals| {
+            for (vals.items) |v| switch (v) {
+                .String => self.allocator.free(v.String),
+                else => {},
+            };
+            vals.deinit();
+        }
+    }
+
+    pub fn values(self: Arguments) []ArgumentValue {
+        if (self._values) |vals| return vals.items;
+    }
+};
+
 const Error = error{
     ArgumentCountOverflow,
     CommandNotExpectingArguments,
@@ -29,11 +57,18 @@ commands: ?std.ArrayList(Command) = null,
 
 // computed in the parse step.
 // DO NOT set it directly
-_args: ?std.ArrayList([]const u8) = null,
+// _args: ?std.ArrayList([]const u8) = null,
 
 // computed argument count limits during parse step.
 // DO NOT set this attribute directly
-number_of_arguments: struct { lower: ?u8 = null, upper: ?u8 = null } = .{},
+// number_of_arguments: struct { lower: ?u8 = null, upper: ?u8 = null } = .{},
+
+arguments: struct {
+    type: ArgumentType = .String,
+    min_count: ?u8 = null,
+    max_count: ?u8 = null,
+    _values: ?std.ArrayList(ArgumentValue) = null,
+} = .{},
 
 // custom validation function for this command
 validation: ?*const fn (self: Command) anyerror!void = null,
