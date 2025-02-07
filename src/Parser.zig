@@ -25,8 +25,6 @@ pub fn init(allocator: std.mem.Allocator, command: *Command) Parser {
 }
 
 fn parse(self: *Parser, args: []const []const u8) !Result {
-    self.command._active = true;
-
     var option_waiting_value: ?*Option = null;
 
     for (args, 0..) |arg, arg_index| {
@@ -87,6 +85,7 @@ fn parse(self: *Parser, args: []const []const u8) !Result {
                 self.state = .void;
                 std.debug.print("\nstate reset\n", .{});
             } else if (self.command.findSubCommand(try token.key())) |sub| {
+                sub._active = true;
                 self.command = sub;
                 if (arg_index < args.len - 1) {
                     return try self.parse(args[arg_index + 1 ..]);
@@ -127,24 +126,21 @@ test "Parser.parse" {
 
 test "Parser.parse subcommands" {
     const allocator = std.testing.allocator;
-    var root_cmd = Command.init(allocator, "my-command", struct {
-        fn run(self: *Command) anyerror!i32 {
-            _ = self;
-            return 0;
-        }
-    }.run);
+    var root_cmd = Command.init(allocator, "my-command", null);
     defer root_cmd.deinit();
 
     const cmd1 = Command.init(allocator, "cmd1", struct {
         fn run(self: *Command) anyerror!i32 {
             _ = self;
-            return 0;
+            return 42;
         }
     }.run);
     try root_cmd.addCommand(cmd1);
     var parser = Parser.init(allocator, &root_cmd);
-    try std.testing.expectEqual(.Help, try parse(&parser, &.{ "cmd1", "--help" }));
+    try std.testing.expectEqual(.Ok, try parse(&parser, &.{"cmd1"}));
     try std.testing.expect(root_cmd.arguments == null);
+
+    try std.testing.expectEqual(@as(i32, 42), try root_cmd.run());
 }
 
 fn findOption(self: Parser, name: []const u8) ?*Option {

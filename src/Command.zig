@@ -71,7 +71,7 @@ arguments: ?Arguments = null,
 validation: ?*const fn (self: Command) anyerror!void = null,
 
 // custom run function for this command.
-runner: *const fn (self: *Command) anyerror!i32,
+runner: ?*const fn (self: *Command) anyerror!i32,
 
 // custom help string generator. owner must deallocate the returned memory!
 helpgen: ?*const fn (cmd: Command) anyerror![]const u8 = null,
@@ -82,7 +82,7 @@ allow_unknown_options: bool = false,
 // DO NOT set this attribute directly
 _active: bool = false,
 
-pub fn init(allocator: std.mem.Allocator, name: []const u8, runner: *const fn (self: *Command) anyerror!i32) Command {
+pub fn init(allocator: std.mem.Allocator, name: []const u8, runner: ?*const fn (self: *Command) anyerror!i32) Command {
     return Command{
         .allocator = allocator,
         .name = name,
@@ -106,17 +106,24 @@ pub fn deinit(self: Command) void {
 }
 
 pub fn run(self: *Command) anyerror!i32 {
-    return self.runner(self);
+    if (self.runner) |runner| {
+        return runner(self);
+    }
+    if (self.commands) |commands| {
+        for (commands.items) |*command| {
+            std.debug.print("\n=---> sub command {s} is_active: {any} \n", .{ command.name, command._active });
+            // from the list of sub commands only the active command can be run
+            // there can be only one active command in the sub command list.
+            if (command._active) return try command.run();
+        }
+    }
+
+    return 0;
 }
 
 test "Command.run" {
     const allocator = std.testing.allocator;
-    var cmd = Command.init(allocator, "my-command", struct {
-        fn run(self: *Command) anyerror!i32 {
-            _ = self;
-            return 0;
-        }
-    }.run);
+    var cmd = Command.init(allocator, "my-command", null);
 
     try std.testing.expectEqualStrings("my-command", cmd.name);
     try std.testing.expect(try cmd.run() == 0);
