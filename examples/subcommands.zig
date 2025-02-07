@@ -1,5 +1,5 @@
 // Run the example with the following command
-// zig build run-example-options -- --int-option 1 -f -s "hello" --unknown-option = val --help
+// zig build run-example-options -- --int-option 1 -f -s "hello" --unknown-option = val
 
 const app = @import("argz");
 const std = @import("std");
@@ -22,7 +22,6 @@ pub fn main() !void {
 
     var cmd = Command.init(allocator, "subcommand", struct {
         fn run(self: *Command) anyerror!i32 {
-            // will not run this because help encountered
             if (self.options) |options| for (options.items, 0..) |o, i| {
                 const val = val: {
                     switch (o.get()) {
@@ -53,11 +52,6 @@ pub fn main() !void {
 
     const str_op = try Option.init(allocator, .String, &[_][]const u8{ "string-option", "s" }, "string option description");
     try cmd.addOption(str_op);
-
-    cmd.examples = &[_][]const u8{
-        "mycommand subcommand --help",
-        "mycommand subcommand --int-option 1 -f -s \"hello\" --unknown-option = val --help",
-    };
 
     try root.parse();
     const res = try root.run();

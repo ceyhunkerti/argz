@@ -60,9 +60,8 @@ pub fn build(b: *std.Build) void {
     inline for (comptime [_][]const u8{
         "arguments",
         "help",
-        "mixed",
         "options",
-        "subcommand",
+        "subcommands",
     }) |name| {
         const example = b.addExecutable(.{
             .name = name,
