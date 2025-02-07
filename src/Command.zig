@@ -15,6 +15,7 @@ pub const Error = error{
     NonRootCommandCannotBeParsed,
     InvalidArgumentLimits,
     MissingArguments,
+    MissingRequiredOption,
 };
 
 // Arguments are typed
@@ -319,6 +320,13 @@ pub fn validate(self: Command) !void {
     if (self.arguments) |args| {
         if (args.min_count > 0 and (args._values == null or args._values.?.items.len < args.min_count)) {
             return error.MissingArguments;
+        }
+    }
+    if (self.options) |options| {
+        for (options.items) |option| {
+            if (option.required and option._value == null) {
+                return error.MissingRequiredOption;
+            }
         }
     }
 

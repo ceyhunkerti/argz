@@ -20,9 +20,9 @@ pub const Value = union(ValueType) {
 
 allocator: mem.Allocator,
 
-_raw_value: []const u8 = undefined,
+_raw_value: ?[]const u8 = null,
 
-_value: Value = undefined,
+_value: ?Value = null,
 
 value_type: ValueType = ValueType.String,
 
@@ -48,6 +48,8 @@ validation: ?*const fn (self: Option) anyerror!void = null,
 // You can also use isUnknown() to check if an option is unknown in your app.
 _is_unknown_option: bool = false,
 
+required: bool = false,
+
 pub fn init(
     allocator: mem.Allocator,
     value_type: ValueType,
@@ -70,10 +72,10 @@ pub fn init(
 pub fn deinit(self: Option) void {
     for (self.names.items) |name| self.allocator.free(name);
     self.names.deinit();
-    switch (self._value) {
+    if (self._value) |val| switch (val) {
         .String => |v| self.allocator.free(v),
         else => {},
-    }
+    };
     if (self.description) |d| self.allocator.free(d);
 }
 
@@ -173,15 +175,15 @@ test "Option.set" {
     try testing.expectError(E.InvalidOptionValue, o4.validate());
 }
 
-pub fn get(self: Option) Value {
+pub fn get(self: Option) ?Value {
     return self._value;
 }
-pub fn getInt(self: Option) i32 {
-    return self._value.Integer;
+pub fn getInt(self: Option) ?i32 {
+    return if (self._value) |v| v.Integer else null;
 }
-pub fn getString(self: Option) []const u8 {
-    return self._value.String;
+pub fn getString(self: Option) ?[]const u8 {
+    return if (self._value) |v| v.String else null;
 }
-pub fn getBoolean(self: Option) bool {
-    return self._value.Boolean;
+pub fn getBoolean(self: Option) ?bool {
+    return if (self._value) |v| v.Boolean else null;
 }
