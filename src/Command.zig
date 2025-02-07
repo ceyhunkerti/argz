@@ -1,3 +1,5 @@
+// ! do not set attributes beginning with _ directly
+
 const Command = @This();
 
 const std = @import("std");
@@ -5,17 +7,39 @@ const mem = std.mem;
 const Option = @import("Option.zig");
 const Parser = @import("Parser.zig");
 
+const Error = error{
+    ArgumentCountOverflow,
+    CommandNotExpectingArguments,
+    MultiOptionIsNotSupported,
+    CommandAlreadyExists,
+    NonRootCommandCannotBeParsed,
+};
+
+// Arguments are typed
+// Arguments generate parse error if we encounter an argument that is not of the expected type
 const ArgumentType = enum { String, Integer, Boolean };
+
+// Union of the possible argument types
 const ArgumentValue = union(ArgumentType) {
     String: []const u8,
     Integer: i32,
+    // ! case sensitive "true" is considered as true anything else is false
     Boolean: bool,
 };
 
 pub const Arguments = struct {
+    // Default argument type is string.
     type: ArgumentType = .String,
+
+    // min_count and max_count are inclusive
+    // if min count is let's say 4 and we got only 3 arguments
+    // todo: we generate an error in the validation step
     min_count: u8 = 0,
+
+    // If we receive more than this number of arguments we generate an error in the parse step.
     max_count: u8 = std.math.maxInt(u8),
+
+    // internal values
     _values: ?std.ArrayList(ArgumentValue) = null,
 
     pub fn deinit(self: Arguments, allocator: std.mem.Allocator) void {
@@ -33,47 +57,34 @@ pub const Arguments = struct {
     }
 };
 
-const Error = error{
-    ArgumentCountOverflow,
-    CommandNotExpectingArguments,
-    MultiOptionIsNotSupported,
-    CommandAlreadyExists,
-    NonRootCommandCannotBeParsed,
-};
-
 allocator: std.mem.Allocator,
 
 // name of the command if it's a subcommand must be unique among the siblings
 name: []const u8,
 
-// list of option parameters
+// list of options for the command
 // option names should be unique for the attached command.
 // different options attached to the same command can not have the same name in their `names` list.
+// Options are heap allocated and must be deallocated by the owner command.
 options: ?std.ArrayList(*Option) = null,
 
 // description of the command
 description: ?[]const u8 = null,
 
 // list of subcommands for this command.
+// use `addCommand` to add subcommands
 _commands: ?std.ArrayList(Command) = null,
-
-// computed in the parse step.
-// DO NOT set it directly
-// _args: ?std.ArrayList([]const u8) = null,
-
-// computed argument count limits during parse step.
-// DO NOT set this attribute directly
-// number_of_arguments: struct { lower: ?u8 = null, upper: ?u8 = null } = .{},
 
 // null means we don't want arguments
 // initialize it with arguments if you accept arguments
 arguments: ?Arguments = null,
 
 // custom validation function for this command
+// todo: will be called within the validate command
 validation: ?*const fn (self: Command) anyerror!void = null,
 
 // custom run function for this command.
-runner: ?*const fn (self: *Command) anyerror!i32,
+runner: ?*const fn (self: *Command) anyerror!i32 = null,
 
 // custom help string generator. owner must deallocate the returned memory!
 helpgen: ?*const fn (cmd: Command) anyerror![]const u8 = null,
@@ -86,6 +97,7 @@ _active: bool = false,
 
 _is_root: bool = true,
 
+// If command parameter is a group command you can set it to null in most of the cases.
 pub fn init(allocator: std.mem.Allocator, name: []const u8, runner: ?*const fn (self: *Command) anyerror!i32) Command {
     return Command{
         .allocator = allocator,
@@ -109,6 +121,10 @@ pub fn deinit(self: Command) void {
     }
 }
 
+// command first checks if it's runner function is not null
+// if it's not null it calls the runner function then calls the sub-commands in order.
+// From the list of the sub commands only one command is marked as "active" during the parse step.
+// Only the active command is then called.
 pub fn run(self: *Command) anyerror!i32 {
     if (self.runner) |runner| {
         return runner(self);
