@@ -5,7 +5,7 @@ const Command = @import("Command.zig");
 const Option = @import("Option.zig");
 const Token = @import("Token.zig");
 
-const Error = error{ ExpectingValue, UnknownNotLongOption, UnknownOption } || Token.Error;
+pub const Error = error{ ExpectingValue, UnknownNotLongOption, UnknownOption } || Token.Error;
 
 const State = enum {
     void,

@@ -7,7 +7,7 @@ const mem = std.mem;
 const Option = @import("Option.zig");
 const Parser = @import("Parser.zig");
 
-const Error = error{
+pub const Error = error{
     ArgumentCountOverflow,
     CommandNotExpectingArguments,
     MultiOptionIsNotSupported,
