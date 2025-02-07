@@ -69,6 +69,11 @@ pub fn deinit(self: Option) void {
     }
 }
 
+pub fn destroy(o: *Option) void {
+    o.deinit();
+    o.allocator.destroy(o);
+}
+
 pub fn isUnknown(self: Option) bool {
     return self._is_unknown_option;
 }
@@ -100,8 +105,9 @@ pub fn help(self: Option) ![]const u8 {
 
 test "Option.help" {
     const allocator = std.testing.allocator;
-    var o = Option.init(allocator, ValueType.String, &[_][]const u8{ "o", "option" });
-    defer o.deinit();
+    var o = try Option.init(allocator, ValueType.String, &[_][]const u8{ "o", "option" });
+    defer Option.destroy(o);
+
     o.description = "my option description";
 
     const s = try o.help();
@@ -125,25 +131,28 @@ pub fn set(self: *Option, value: []const u8) !void {
 }
 test "Option.set" {
     const allocator = std.testing.allocator;
-    var o1 = Option.init(allocator, ValueType.String, &[_][]const u8{ "o", "option" });
-    defer o1.deinit();
+    var o1 = try Option.init(allocator, ValueType.String, &[_][]const u8{ "o", "option" });
+    defer Option.destroy(o1);
     try o1.set("value");
     try testing.expectEqualStrings("value", o1.getString());
 
-    var o2 = Option.init(allocator, ValueType.Int, &[_][]const u8{ "o", "option" });
-    defer o2.deinit();
+    var o2 = try Option.init(allocator, ValueType.Integer, &[_][]const u8{ "o", "option" });
+    defer Option.destroy(o2);
+
     try o2.set("10");
-    try testing.expectEqual(Value{ .Int = 10 }, o2.get());
+    try testing.expectEqual(Value{ .Integer = 10 }, o2.get());
     try testing.expectEqual(o2.getInt(), 10);
 
-    var o3 = Option.init(allocator, ValueType.Boolean, &[_][]const u8{ "o", "option" });
-    defer o3.deinit();
+    var o3 = try Option.init(allocator, ValueType.Boolean, &[_][]const u8{ "o", "option" });
+    defer Option.destroy(o3);
+
     try o3.set("true");
     try testing.expectEqual(Value{ .Boolean = true }, o3.get());
     try testing.expectEqual(o3.getBoolean(), true);
 
-    var o4 = Option.init(allocator, ValueType.Int, &[_][]const u8{ "o", "option" });
-    defer o4.deinit();
+    var o4 = try Option.init(allocator, ValueType.Integer, &[_][]const u8{ "o", "option" });
+    defer Option.destroy(o4);
+
     try o4.set("20");
 
     const E = error{
@@ -162,7 +171,7 @@ pub fn get(self: Option) Value {
     return self._value;
 }
 pub fn getInt(self: Option) i32 {
-    return self._value.Int;
+    return self._value.Integer;
 }
 pub fn getString(self: Option) []const u8 {
     return self._value.String;

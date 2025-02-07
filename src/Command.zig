@@ -75,7 +75,7 @@ description: ?[]const u8 = null,
 
 // list of subcommands for this command.
 // use `addCommand` to add subcommands
-_commands: ?std.ArrayList(Command) = null,
+_commands: ?std.ArrayList(*Command) = null,
 
 // null means we don't want arguments
 // initialize it with arguments if you accept arguments
@@ -113,8 +113,11 @@ pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self
 }
 
 pub fn deinit(self: Command) void {
+    std.debug.print("deinit command {s}\n", .{self.name});
+
     if (self.options) |options| {
         for (options.items) |option| {
+            std.debug.print("deinit option {any}\n", .{option.names.items[0]});
             option.deinit();
             self.allocator.destroy(option);
         }
@@ -122,7 +125,9 @@ pub fn deinit(self: Command) void {
     }
     if (self.arguments) |args| args.deinit(self.allocator);
     if (self._commands) |commands| {
-        for (commands.items) |command| command.deinit();
+        for (commands.items) |command| {
+            command.deinit();
+        }
         commands.deinit();
     }
 }
@@ -136,7 +141,7 @@ pub fn run(self: *Command) anyerror!i32 {
         return runner(self);
     }
     if (self._commands) |commands| {
-        for (commands.items) |*command| {
+        for (commands.items) |command| {
             // from the list of sub commands only the active command can be run
             // there can be only one active command in the sub command list.
             if (command._active) return try command.run();
@@ -164,6 +169,7 @@ pub fn parse(self: *Command) !void {
         }
     }
 
+    std.debug.print("parse command {s} {any}\n", .{ self.name, self._is_root });
     if (!self._is_root) return Error.NonRootCommandCannotBeParsed;
 
     // parse the process arguments
@@ -190,14 +196,14 @@ pub fn parse(self: *Command) !void {
 // Add subcommand to this command. Sub command names must be unique!
 pub fn addCommand(self: *Command, command: *Command) !void {
     if (self._commands == null) {
-        self._commands = std.ArrayList(Command).init(self.allocator);
+        self._commands = std.ArrayList(*Command).init(self.allocator);
     } else {
         if (self.findSubCommand(command.name) != null) {
             return error.CommandAlreadyExists;
         }
     }
     command._is_root = false;
-    try self._commands.?.append(command.*);
+    try self._commands.?.append(command);
 }
 
 // Add option to this command. Option names must be unique!
@@ -224,7 +230,7 @@ pub fn findOption(self: *Command, names: []const []const u8) ?*Option {
 
 // Find the subcommand from this commands commands list.
 pub fn findSubCommand(self: *Command, name: []const u8) ?*Command {
-    if (self._commands) |subs| for (subs.items) |*s| if (mem.eql(u8, s.name, name)) return s;
+    if (self._commands) |subs| for (subs.items) |s| if (mem.eql(u8, s.name, name)) return s;
     return null;
 }
 

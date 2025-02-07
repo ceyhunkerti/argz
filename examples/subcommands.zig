@@ -17,7 +17,10 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    var cmd = Command.init(allocator, "mycommand", struct {
+    var root = Command.init(allocator, "mycommand", null);
+    defer root.deinit();
+
+    var cmd = Command.init(allocator, "subcommand", struct {
         fn run(self: *Command) anyerror!i32 {
             if (self.options) |options| for (options.items, 0..) |o, i| {
                 const val = val: {
@@ -35,9 +38,10 @@ pub fn main() !void {
         }
     }.run);
 
+    try root.addCommand(&cmd);
+
     // we allow unknown options here
     cmd.allow_unknown_options = true;
-    defer cmd.deinit();
 
     const int_op = try Option.init(allocator, .Integer, &[_][]const u8{ "int-option", "i" });
     try cmd.addOption(int_op);
@@ -50,6 +54,6 @@ pub fn main() !void {
     try cmd.addOption(str_op);
 
     try cmd.parse();
-    const res = try cmd.run();
+    const res = try root.run();
     std.debug.assert(res == 0);
 }

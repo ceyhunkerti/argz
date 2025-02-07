@@ -44,7 +44,11 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
         }
         if (token.isOption() and !token.isChained()) {
             if (self.findOption(try token.key())) |option| {
-                if (option.is_flag) try option.set("true");
+                if (option.is_flag) {
+                    try option.set("true");
+                    continue;
+                }
+
                 if (token.isKeyValue()) {
                     try option.set(try token.value());
                 } else {

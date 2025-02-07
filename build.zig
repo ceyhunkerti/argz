@@ -62,7 +62,7 @@ pub fn build(b: *std.Build) void {
         // "help",
         // "mixed",
         "options",
-        // "subcommand",
+        "subcommands",
     }) |name| {
         const example = b.addExecutable(.{
             .name = name,
