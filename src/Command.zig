@@ -103,6 +103,9 @@ _active: bool = false,
 
 _is_root: bool = true,
 
+// if -h or --help is encountered during the parse phase
+_help_requested: bool = false,
+
 // If command parameter is a group command you can set it to null in most of the cases.
 pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self: *Command) anyerror!i32) Command {
     return Command{
@@ -113,11 +116,8 @@ pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self
 }
 
 pub fn deinit(self: Command) void {
-    std.debug.print("deinit command {s}\n", .{self.name});
-
     if (self.options) |options| {
         for (options.items) |option| {
-            std.debug.print("deinit option {any}\n", .{option.names.items[0]});
             option.deinit();
             self.allocator.destroy(option);
         }
@@ -137,6 +137,11 @@ pub fn deinit(self: Command) void {
 // From the list of the sub commands only one command is marked as "active" during the parse step.
 // Only the active command is then called.
 pub fn run(self: *Command) anyerror!i32 {
+
+    // if help is requested just return 0
+    // help is printed during parse phase
+    if (self._help_requested) return 0;
+
     if (self.runner) |runner| {
         return runner(self);
     }
@@ -169,7 +174,6 @@ pub fn parse(self: *Command) !void {
         }
     }
 
-    std.debug.print("parse command {s} {any}\n", .{ self.name, self._is_root });
     if (!self._is_root) return Error.NonRootCommandCannotBeParsed;
 
     // parse the process arguments
@@ -185,11 +189,10 @@ pub fn parse(self: *Command) !void {
         try self.validate();
         return;
     }
-    const res = try parser.parse(args.items[1..]);
-    if (res == .Help) {
+    if (try parser.parse(args.items[1..]) == .Help) {
         try parser.command.printHelp();
+        return;
     }
-
     try self.validate();
 }
 
@@ -266,9 +269,33 @@ pub fn printHelp(self: *Command) !void {
         const help = try helpgen(self.*);
         defer self.allocator.free(help);
         std.debug.print("{s}\n", .{help});
-    } else {
-        // todo
-        std.debug.print("{s}\n", .{self.name});
+        return;
+    }
+
+    std.debug.print("\nCommand: {s}\n", .{self.name});
+    if (self.arguments) |args| {
+        if (args.min_count > 0) {
+            std.debug.print("Arguments (min: {d}, max: {d}): \n", .{ args.min_count, args.max_count });
+        } else {
+            std.debug.print("Arguments (max: {d}): \n", .{args.max_count});
+        }
+    }
+    if (self.options) |options| {
+        std.debug.print("Options:\n", .{});
+        for (options.items) |option| {
+            for (option.names.items, 0..) |name, i| {
+                if (name.len == 1) {
+                    std.debug.print("-{s}", .{name});
+                } else {
+                    std.debug.print("--{s}", .{name});
+                }
+                if (i != option.names.items.len - 1) std.debug.print(", ", .{});
+            }
+            if (option.description) |desc| {
+                std.debug.print(": {s}", .{desc});
+            }
+            std.debug.print("\n", .{});
+        }
     }
 }
 

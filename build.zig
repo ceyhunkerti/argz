@@ -59,8 +59,7 @@ pub fn build(b: *std.Build) void {
     const examples_step = b.step("examples", "Build examples");
     inline for (comptime [_][]const u8{
         "arguments",
-        // "help",
-        // "mixed",
+        "help",
         "options",
         "subcommands",
     }) |name| {

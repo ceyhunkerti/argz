@@ -31,7 +31,10 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
         if (arg.len == 0) continue;
         var token = Token.init(self.allocator, arg);
         try token.parse();
-        if (token.isHelp()) return .Help;
+        if (token.isHelp()) {
+            self.root._help_requested = true;
+            return .Help;
+        }
 
         if (token.isEqual()) {
             if (self.state == .expecting_value) {
