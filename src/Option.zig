@@ -32,7 +32,7 @@ value_type: ValueType = ValueType.String,
 // short options are always single characters and be chained with other options
 names: std.ArrayList([]const u8) = undefined,
 
-comptime default: ?Value = null,
+default: ?Value = null,
 
 // it's owned by the option and managed inside this.
 description: ?[]const u8 = null,
@@ -48,7 +48,12 @@ validation: ?*const fn (self: Option) anyerror!void = null,
 // You can also use isUnknown() to check if an option is unknown in your app.
 _is_unknown_option: bool = false,
 
-pub fn init(allocator: mem.Allocator, value_type: ValueType, names: []const []const u8, description: ?[]const u8) !*Option {
+pub fn init(
+    allocator: mem.Allocator,
+    value_type: ValueType,
+    names: []const []const u8,
+    description: ?[]const u8,
+) !*Option {
     var option = try allocator.create(Option);
     option.* = .{
         .allocator = allocator,

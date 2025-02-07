@@ -43,14 +43,14 @@ pub fn main() !void {
     // we allow unknown options here
     cmd.allow_unknown_options = true;
 
-    const int_op = try Option.init(allocator, .Integer, &[_][]const u8{ "int-option", "i" });
+    const int_op = try Option.init(allocator, .Integer, &[_][]const u8{ "int-option", "i" }, "int option description");
     try cmd.addOption(int_op);
 
-    const flag_op = try Option.init(allocator, .Boolean, &[_][]const u8{ "flag-option", "f" });
+    const flag_op = try Option.init(allocator, .Boolean, &[_][]const u8{ "flag-option", "f" }, "flag option description");
     flag_op.is_flag = true;
     try cmd.addOption(flag_op);
 
-    const str_op = try Option.init(allocator, .String, &[_][]const u8{ "string-option", "s" });
+    const str_op = try Option.init(allocator, .String, &[_][]const u8{ "string-option", "s" }, "string option description");
     try cmd.addOption(str_op);
 
     try root.parse();

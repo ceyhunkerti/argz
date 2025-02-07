@@ -91,6 +91,8 @@ runner: ?*const fn (self: *Command) anyerror!i32 = null,
 // custom help string generator. owner must deallocate the returned memory!
 helpgen: ?*const fn (cmd: Command) anyerror![]const u8 = null,
 
+examples: ?[]const []const u8 = null,
+
 // If this attribute is set to true unknown options are allowed and the parser
 // add these options to the options list.
 // ! Unknown options can only be long options (i.e --option)
@@ -280,20 +282,36 @@ pub fn printHelp(self: *Command) !void {
         }
     }
     if (self.options) |options| {
-        std.debug.print("Options:\n", .{});
+        std.debug.print("\nOptions:\n", .{});
+
         for (options.items) |option| {
+            var line = std.ArrayList(u8).init(self.allocator);
+            defer line.deinit();
+
             for (option.names.items, 0..) |name, i| {
                 if (name.len == 1) {
-                    std.debug.print("-{s}", .{name});
+                    try line.append('-');
                 } else {
-                    std.debug.print("--{s}", .{name});
+                    try line.appendSlice("--");
                 }
-                if (i != option.names.items.len - 1) std.debug.print(", ", .{});
+                try line.appendSlice(name);
+                if (i != option.names.items.len - 1) try line.append(',');
             }
             if (option.description) |desc| {
-                std.debug.print(": {s}", .{desc});
+                if (line.items.len < 30) {
+                    try line.appendNTimes(' ', 30 - line.items.len);
+                } else {
+                    try line.appendNTimes(' ', 1);
+                }
+                try line.appendSlice(desc);
             }
-            std.debug.print("\n", .{});
+            std.debug.print("{s}\n", .{line.items});
+        }
+        if (self.examples) |examples| {
+            std.debug.print("\nExamples:\n", .{});
+            for (examples) |example| {
+                std.debug.print("{s}\n", .{example});
+            }
         }
     }
 }
