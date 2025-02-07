@@ -1,3 +1,5 @@
+// ! do not set attributes beginning with _ directly
+
 const std = @import("std");
 const mem = std.mem;
 const Token = @This();
@@ -34,9 +36,12 @@ pub fn init(allocator: std.mem.Allocator, content: []const u8) Token {
 
 pub fn parse(self: *Token) !void {
     var str: ?[]const u8 = null;
+
     if (mem.eql(u8, self.content, "-")) {
+        // its only a single dash without postfix
         self._key = self.content;
     } else if (mem.eql(u8, self.content, "--")) {
+        // its only a double dash without postfix then it's marked as terminator.
         self._dash = .terminator_dash;
     } else if (mem.startsWith(u8, self.content, "--")) {
         self._dash = .double_dash;
@@ -53,7 +58,6 @@ pub fn parse(self: *Token) !void {
             // "some=thing"
             self._key = s;
         } else if (self.hasDash()) {
-            // std.debug.print("\n{s} hash-dash\n", .{s});
             if (std.mem.indexOf(u8, s, "=")) |idx| {
                 //
                 if (idx == 0) {

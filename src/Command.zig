@@ -13,6 +13,8 @@ const Error = error{
     MultiOptionIsNotSupported,
     CommandAlreadyExists,
     NonRootCommandCannotBeParsed,
+    InvalidArgumentLimits,
+    MissingArguments,
 };
 
 // Arguments are typed
@@ -42,7 +44,7 @@ pub const Arguments = struct {
     // internal values
     _values: ?std.ArrayList(ArgumentValue) = null,
 
-    pub fn deinit(self: Arguments, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: Arguments, allocator: mem.Allocator) void {
         if (self._values) |vals| {
             for (vals.items) |v| switch (v) {
                 .String => allocator.free(v.String),
@@ -57,7 +59,7 @@ pub const Arguments = struct {
     }
 };
 
-allocator: std.mem.Allocator,
+allocator: mem.Allocator,
 
 // name of the command if it's a subcommand must be unique among the siblings
 name: []const u8,
@@ -89,6 +91,10 @@ runner: ?*const fn (self: *Command) anyerror!i32 = null,
 // custom help string generator. owner must deallocate the returned memory!
 helpgen: ?*const fn (cmd: Command) anyerror![]const u8 = null,
 
+// If this attribute is set to true unknown options are allowed and the parser
+// add these options to the options list.
+// ! Unknown options can only be long options (i.e --option)
+// If set to true and a short unknown option is encountered during the parse phase we generate error.
 allow_unknown_options: bool = false,
 
 // computed at the parse time.
@@ -98,7 +104,7 @@ _active: bool = false,
 _is_root: bool = true,
 
 // If command parameter is a group command you can set it to null in most of the cases.
-pub fn init(allocator: std.mem.Allocator, name: []const u8, runner: ?*const fn (self: *Command) anyerror!i32) Command {
+pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self: *Command) anyerror!i32) Command {
     return Command{
         .allocator = allocator,
         .name = name,
@@ -131,7 +137,6 @@ pub fn run(self: *Command) anyerror!i32 {
     }
     if (self._commands) |commands| {
         for (commands.items) |*command| {
-            std.debug.print("\n=---> sub command {s} is_active: {any} \n", .{ command.name, command._active });
             // from the list of sub commands only the active command can be run
             // there can be only one active command in the sub command list.
             if (command._active) return try command.run();
@@ -149,9 +154,19 @@ test "Command.run" {
     try std.testing.expect(try cmd.run() == 0);
 }
 
+// Only the root command is parsable
+// ! You should call this only for the root command.
 pub fn parse(self: *Command) !void {
+    // pre checks
+    if (self.arguments) |args| {
+        if (args.min_count > args.max_count) {
+            return Error.InvalidArgumentLimits;
+        }
+    }
+
     if (!self._is_root) return Error.NonRootCommandCannotBeParsed;
 
+    // parse the process arguments
     var args_it = try std.process.argsWithAllocator(self.allocator);
 
     var args = std.ArrayList([]const u8).init(self.allocator);
@@ -160,12 +175,19 @@ pub fn parse(self: *Command) !void {
         try args.append(arg);
     }
     var parser = Parser.init(self.allocator, self);
-    const res = try parser.parse(args.items);
+    if (args.items.len == 0) {
+        try self.validate();
+        return;
+    }
+    const res = try parser.parse(args.items[1..]);
     if (res == .Help) {
         try parser.command.printHelp();
     }
+
+    try self.validate();
 }
 
+// Add subcommand to this command. Sub command names must be unique!
 pub fn addCommand(self: *Command, command: *Command) !void {
     if (self._commands == null) {
         self._commands = std.ArrayList(Command).init(self.allocator);
@@ -178,6 +200,7 @@ pub fn addCommand(self: *Command, command: *Command) !void {
     try self._commands.?.append(command.*);
 }
 
+// Add option to this command. Option names must be unique!
 pub fn addOption(self: *Command, option: *Option) !void {
     if (self.options == null) {
         self.options = std.ArrayList(*Option).init(self.allocator);
@@ -189,6 +212,7 @@ pub fn addOption(self: *Command, option: *Option) !void {
     try self.options.?.append(option);
 }
 
+// Find the option with one of possible names of it.
 pub fn findOption(self: *Command, names: []const []const u8) ?*Option {
     if (self.options) |options| {
         for (options.items) |option| {
@@ -198,12 +222,15 @@ pub fn findOption(self: *Command, names: []const []const u8) ?*Option {
     return null;
 }
 
+// Find the subcommand from this commands commands list.
 pub fn findSubCommand(self: *Command, name: []const u8) ?*Command {
     if (self._commands) |subs| for (subs.items) |*s| if (mem.eql(u8, s.name, name)) return s;
     return null;
 }
 
+// Adds arguments to this command.
 pub fn addArgument(self: *Command, argument: []const u8) !void {
+    std.debug.print("\n adding arg {s} \n", .{argument});
     if (self.arguments) |*args| {
         if (args._values == null) {
             args._values = std.ArrayList(ArgumentValue).init(self.allocator);
@@ -214,13 +241,20 @@ pub fn addArgument(self: *Command, argument: []const u8) !void {
         switch (args.type) {
             .String => try args._values.?.append(ArgumentValue{ .String = try self.allocator.dupe(u8, argument) }),
             .Integer => try args._values.?.append(ArgumentValue{ .Integer = try std.fmt.parseInt(i32, argument, 10) }),
-            .Boolean => try args._values.?.append(ArgumentValue{ .Boolean = std.mem.eql(u8, argument, "true") }),
+            .Boolean => try args._values.?.append(ArgumentValue{ .Boolean = mem.eql(u8, argument, "true") }),
         }
     } else {
         return Error.CommandNotExpectingArguments;
     }
 }
 
+pub fn argumentValues(self: Command) ?[]ArgumentValue {
+    if (self.arguments) |args| return args._values.?.items;
+    return null;
+}
+
+// Prints the help for this command
+// todo
 pub fn printHelp(self: *Command) !void {
     if (self.helpgen) |helpgen| {
         const help = try helpgen(self.*);
@@ -230,4 +264,14 @@ pub fn printHelp(self: *Command) !void {
         // todo
         std.debug.print("{s}\n", .{self.name});
     }
+}
+
+pub fn validate(self: Command) !void {
+    if (self.arguments) |args| {
+        if (args.min_count > 0 and (args._values == null or args._values.?.items.len < args.min_count)) {
+            return error.MissingArguments;
+        }
+    }
+
+    if (self.validation) |f| try f(self);
 }

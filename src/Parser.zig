@@ -5,7 +5,7 @@ const Command = @import("Command.zig");
 const Option = @import("Option.zig");
 const Token = @import("Token.zig");
 
-const Error = error{ ExpectingValue, UnknownNotLongOption } || Token.Error;
+const Error = error{ ExpectingValue, UnknownNotLongOption, UnknownOption } || Token.Error;
 
 const State = enum {
     void,
@@ -40,12 +40,9 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
         }
 
         if (token.isOption() and self.state == .expecting_value) {
-            std.debug.print("\n arg: {s}\n", .{arg});
             return error.ExpectingValue;
         }
-        std.debug.print("\narg: {s}\n", .{arg});
         if (token.isOption() and !token.isChained()) {
-            std.debug.print("\n {s} is option\n", .{arg});
             if (self.findOption(try token.key())) |option| {
                 if (option.is_flag) try option.set("true");
                 if (token.isKeyValue()) {
@@ -55,18 +52,17 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                     self.state = .expecting_value;
                 }
             } else {
-                std.debug.print("\nunknown option: {s}\n", .{try token.key()});
                 if (self.command.allow_unknown_options) {
                     if (!token.hasDoubleDash()) {
                         // only long format is allowed for unknown options
                         return error.UnknownNotLongOption;
                     }
+                    var new_option = try Option.init(self.allocator, Option.ValueType.String, &.{try token.key()});
 
-                    var new_option = try self.allocator.create(Option);
-                    errdefer self.allocator.destroy(new_option);
-
-                    new_option.* = Option.init(self.allocator, Option.ValueType.String, &.{try token.key()});
-
+                    errdefer {
+                        new_option.deinit();
+                        self.allocator.destroy(new_option);
+                    }
                     if (token.isKeyValue()) {
                         try new_option.set(try token.value());
                         self.state = .void;
@@ -75,15 +71,16 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                         self.state = .expecting_value;
                     }
                     try self.command.addOption(new_option);
+                } else {
+                    std.debug.print("Unknown option: {s}\n", .{arg});
+                    return error.UnknownOption;
                 }
             }
         } else if (token.isAtom()) {
-            std.debug.print("\n {s} is atom\n", .{arg});
             if (option_waiting_value) |option| {
                 try option.set(try token.key());
                 option_waiting_value = null;
                 self.state = .void;
-                std.debug.print("\nstate reset\n", .{});
             } else if (self.command.findSubCommand(try token.key())) |sub| {
                 sub._active = true;
                 self.command = sub;
@@ -111,17 +108,17 @@ test "Parser.parse" {
 
     cmd.allow_unknown_options = true;
     var parser = Parser.init(allocator, &cmd);
+
     try std.testing.expectEqual(.Help, try parser.parse(&.{ "--o", "v", "--help" }));
     try std.testing.expectError(Error.InvalidShortOption, parser.parse(&.{ "-abc=value", "--o1=v1" }));
     try std.testing.expectEqual(.Help, try parser.parse(&.{ "--o11", "v", "--o12=v1", "arg1", "arg2", "--help" }));
     _ = try parser.parse(&.{ "--xyz", "=", "val", "--help" });
 
-    std.debug.print("\nOptionCpount: {d}\n", .{cmd.options.?.items.len});
-    if (cmd.options) |options| {
-        for (options.items) |option| {
-            std.debug.print("\nOption:  {s} {any}\n", .{ option.names.items[0], option.get() });
-        }
-    }
+    // if (cmd.options) |options| {
+    //     for (options.items) |option| {
+    //         std.debug.print("\nOption:  {s} {any}\n", .{ option.names.items[0], option.get() });
+    //     }
+    // }
 }
 
 test "Parser.parse subcommands" {

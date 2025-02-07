@@ -1,20 +1,24 @@
+// ! do not set attributes beginning with _ directly
+
 const Option = @This();
 const std = @import("std");
+const mem = std.mem;
+const testing = std.testing;
 
 pub const ValueType = enum {
     String,
-    Int,
+    Integer,
     Boolean,
 };
 
 pub const Value = union(ValueType) {
     String: []const u8,
-    Int: i32,
+    Integer: i32,
     Boolean: bool,
     // StringArray: std.ArrayList([]const u8),
 };
 
-allocator: std.mem.Allocator,
+allocator: mem.Allocator,
 
 _raw_value: []const u8 = undefined,
 
@@ -22,6 +26,10 @@ _value: Value = undefined,
 
 value_type: ValueType = ValueType.String,
 
+// Options can have multiple names
+// This also enables both short and long names to be specified
+// eg. -c, --config
+// short options are always single characters and be chained with other options
 names: std.ArrayList([]const u8) = undefined,
 
 comptime default: ?Value = null,
@@ -29,14 +37,19 @@ comptime default: ?Value = null,
 description: ?[]const u8 = null,
 
 // different than bool type, does not require a value.
+// -v, --version
 is_flag: bool = false,
 
+// custom validation function for this option.
 validation: ?*const fn (self: Option) anyerror!void = null,
 
-_is_dynamic_option: bool = false,
+// If command accepts unknown options and this one is, then this is set to true during parse step.
+// You can also use isUnknown() to check if an option is unknown in your app.
+_is_unknown_option: bool = false,
 
-pub fn init(allocator: std.mem.Allocator, value_type: ValueType, names: []const []const u8) Option {
-    var option = Option{
+pub fn init(allocator: mem.Allocator, value_type: ValueType, names: []const []const u8) !*Option {
+    var option = try allocator.create(Option);
+    option.* = .{
         .allocator = allocator,
         .value_type = value_type,
     };
@@ -56,12 +69,16 @@ pub fn deinit(self: Option) void {
     }
 }
 
+pub fn isUnknown(self: Option) bool {
+    return self._is_unknown_option;
+}
+
 pub fn validate(self: Option) anyerror!void {
     if (self.validation) |f| try f(self);
 }
 
-pub fn help(self: Option, allocator: std.mem.Allocator) ![]const u8 {
-    var result = std.ArrayList(u8).init(allocator);
+pub fn help(self: Option) ![]const u8 {
+    var result = std.ArrayList(u8).init(self.allocator);
     defer result.deinit();
 
     for (self.names.items, 0..) |name, i| {
@@ -87,23 +104,23 @@ test "Option.help" {
     defer o.deinit();
     o.description = "my option description";
 
-    const s = try o.help(allocator);
+    const s = try o.help();
     defer allocator.free(s);
 
-    try std.testing.expectEqualStrings("-o,--option                   my option description", s);
+    try testing.expectEqualStrings("-o,--option                   my option description", s);
 }
 
 pub fn hasName(self: Option, name: []const u8) bool {
-    for (self.names.items) |n| if (std.mem.eql(u8, name, n)) return true;
+    for (self.names.items) |n| if (mem.eql(u8, name, n)) return true;
     return false;
 }
 
 pub fn set(self: *Option, value: []const u8) !void {
     self._raw_value = value;
     self._value = switch (self.value_type) {
-        .Boolean => .{ .Boolean = std.mem.eql(u8, value, "true") },
+        .Boolean => .{ .Boolean = mem.eql(u8, value, "true") },
         .String => .{ .String = try self.allocator.dupe(u8, value) },
-        .Int => .{ .Int = try std.fmt.parseInt(i32, value, 10) },
+        .Integer => .{ .Integer = try std.fmt.parseInt(i32, value, 10) },
     };
 }
 test "Option.set" {
@@ -111,19 +128,19 @@ test "Option.set" {
     var o1 = Option.init(allocator, ValueType.String, &[_][]const u8{ "o", "option" });
     defer o1.deinit();
     try o1.set("value");
-    try std.testing.expectEqualStrings("value", o1.getString());
+    try testing.expectEqualStrings("value", o1.getString());
 
     var o2 = Option.init(allocator, ValueType.Int, &[_][]const u8{ "o", "option" });
     defer o2.deinit();
     try o2.set("10");
-    try std.testing.expectEqual(Value{ .Int = 10 }, o2.get());
-    try std.testing.expectEqual(o2.getInt(), 10);
+    try testing.expectEqual(Value{ .Int = 10 }, o2.get());
+    try testing.expectEqual(o2.getInt(), 10);
 
     var o3 = Option.init(allocator, ValueType.Boolean, &[_][]const u8{ "o", "option" });
     defer o3.deinit();
     try o3.set("true");
-    try std.testing.expectEqual(Value{ .Boolean = true }, o3.get());
-    try std.testing.expectEqual(o3.getBoolean(), true);
+    try testing.expectEqual(Value{ .Boolean = true }, o3.get());
+    try testing.expectEqual(o3.getBoolean(), true);
 
     var o4 = Option.init(allocator, ValueType.Int, &[_][]const u8{ "o", "option" });
     defer o4.deinit();
@@ -138,7 +155,7 @@ test "Option.set" {
         }
     };
     o4.validation = s.validation;
-    try std.testing.expectError(E.InvalidOptionValue, o4.validate());
+    try testing.expectError(E.InvalidOptionValue, o4.validate());
 }
 
 pub fn get(self: Option) Value {
