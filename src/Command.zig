@@ -8,6 +8,7 @@ const Error = error{
     ArgumentCountOverflow,
     CommandNotExpectingArguments,
     MultiOptionIsNotSupported,
+    CommandAlreadyExists,
 };
 
 allocator: std.mem.Allocator,
@@ -61,8 +62,11 @@ pub fn deinit(self: *Command) void {
         }
         options.deinit();
     }
-    if (self.commands) |commands| commands.deinit();
     if (self._args) |args| args.deinit();
+    if (self.commands) |commands| {
+        for (commands.items) |command| command.deinit();
+        commands.deinit();
+    }
 }
 
 pub fn run(self: *Command) anyerror!i32 {
@@ -90,6 +94,17 @@ pub fn parse(self: *Command) !void {
     while (args_it.next()) |arg| {
         try args.append(arg);
     }
+}
+
+pub fn addCommand(self: *Command, command: Command) !void {
+    if (self.commands == null) {
+        self.commands = std.ArrayList(Command).init(self.allocator);
+    } else {
+        if (self.findSubCommand(command.name) != null) {
+            return error.CommandAlreadyExists;
+        }
+    }
+    try self.commands.?.append(command);
 }
 
 pub fn addOption(self: *Command, option: *Option) !void {
