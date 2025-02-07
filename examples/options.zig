@@ -1,5 +1,5 @@
 // Run the example with the following command
-// zig build run-example-options -- --int-option 1 -f -s "hello" --unknown-option = val
+// zig build run-example-options -- --int-option 1 -af -s "hello" --unknown-option = val
 
 const app = @import("argz");
 const std = @import("std");
@@ -45,6 +45,15 @@ pub fn main() !void {
     const flag_op = try Option.init(allocator, .Boolean, &[_][]const u8{ "flag-option", "f" }, "flag option description");
     flag_op.is_flag = true;
     try cmd.addOption(flag_op);
+
+    const another_flag_op = try Option.init(
+        allocator,
+        .Boolean,
+        &[_][]const u8{ "another-flag-option", "a" },
+        "another flag option description",
+    );
+    another_flag_op.is_flag = true;
+    try cmd.addOption(another_flag_op);
 
     const str_op = try Option.init(allocator, .String, &[_][]const u8{ "string-option", "s" }, "string option description");
     try cmd.addOption(str_op);
