@@ -3,6 +3,7 @@ const Command = @This();
 const std = @import("std");
 const mem = std.mem;
 const Option = @import("Option.zig");
+const Parser = @import("Parser.zig");
 
 const ArgumentType = enum { String, Integer, Boolean };
 const ArgumentValue = union(ArgumentType) {
@@ -37,6 +38,7 @@ const Error = error{
     CommandNotExpectingArguments,
     MultiOptionIsNotSupported,
     CommandAlreadyExists,
+    NonRootCommandCannotBeParsed,
 };
 
 allocator: std.mem.Allocator,
@@ -53,7 +55,7 @@ options: ?std.ArrayList(*Option) = null,
 description: ?[]const u8 = null,
 
 // list of subcommands for this command.
-commands: ?std.ArrayList(Command) = null,
+_commands: ?std.ArrayList(Command) = null,
 
 // computed in the parse step.
 // DO NOT set it directly
@@ -82,6 +84,8 @@ allow_unknown_options: bool = false,
 // DO NOT set this attribute directly
 _active: bool = false,
 
+_is_root: bool = true,
+
 pub fn init(allocator: std.mem.Allocator, name: []const u8, runner: ?*const fn (self: *Command) anyerror!i32) Command {
     return Command{
         .allocator = allocator,
@@ -99,7 +103,7 @@ pub fn deinit(self: Command) void {
         options.deinit();
     }
     if (self.arguments) |args| args.deinit(self.allocator);
-    if (self.commands) |commands| {
+    if (self._commands) |commands| {
         for (commands.items) |command| command.deinit();
         commands.deinit();
     }
@@ -109,7 +113,7 @@ pub fn run(self: *Command) anyerror!i32 {
     if (self.runner) |runner| {
         return runner(self);
     }
-    if (self.commands) |commands| {
+    if (self._commands) |commands| {
         for (commands.items) |*command| {
             std.debug.print("\n=---> sub command {s} is_active: {any} \n", .{ command.name, command._active });
             // from the list of sub commands only the active command can be run
@@ -130,6 +134,8 @@ test "Command.run" {
 }
 
 pub fn parse(self: *Command) !void {
+    if (!self._is_root) return Error.NonRootCommandCannotBeParsed;
+
     var args_it = try std.process.argsWithAllocator(self.allocator);
 
     var args = std.ArrayList([]const u8).init(self.allocator);
@@ -137,17 +143,23 @@ pub fn parse(self: *Command) !void {
     while (args_it.next()) |arg| {
         try args.append(arg);
     }
+    var parser = Parser.init(self.allocator, self);
+    const res = try parser.parse(args.items);
+    if (res == .Help) {
+        try parser.command.printHelp();
+    }
 }
 
-pub fn addCommand(self: *Command, command: Command) !void {
-    if (self.commands == null) {
-        self.commands = std.ArrayList(Command).init(self.allocator);
+pub fn addCommand(self: *Command, command: *Command) !void {
+    if (self._commands == null) {
+        self._commands = std.ArrayList(Command).init(self.allocator);
     } else {
         if (self.findSubCommand(command.name) != null) {
             return error.CommandAlreadyExists;
         }
     }
-    try self.commands.?.append(command);
+    command._is_root = false;
+    try self._commands.?.append(command.*);
 }
 
 pub fn addOption(self: *Command, option: *Option) !void {
@@ -171,7 +183,7 @@ pub fn findOption(self: *Command, names: []const []const u8) ?*Option {
 }
 
 pub fn findSubCommand(self: *Command, name: []const u8) ?*Command {
-    if (self.commands) |subs| for (subs.items) |*s| if (mem.eql(u8, s.name, name)) return s;
+    if (self._commands) |subs| for (subs.items) |*s| if (mem.eql(u8, s.name, name)) return s;
     return null;
 }
 
@@ -190,5 +202,16 @@ pub fn addArgument(self: *Command, argument: []const u8) !void {
         }
     } else {
         return Error.CommandNotExpectingArguments;
+    }
+}
+
+pub fn printHelp(self: *Command) !void {
+    if (self.helpgen) |helpgen| {
+        const help = try helpgen(self.*);
+        defer self.allocator.free(help);
+        std.debug.print("{s}\n", .{help});
+    } else {
+        // todo
+        std.debug.print("{s}\n", .{self.name});
     }
 }

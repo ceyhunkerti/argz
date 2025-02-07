@@ -24,7 +24,7 @@ pub fn init(allocator: std.mem.Allocator, command: *Command) Parser {
     return .{ .allocator = allocator, .command = command, .root = command };
 }
 
-fn parse(self: *Parser, args: []const []const u8) !Result {
+pub fn parse(self: *Parser, args: []const []const u8) !Result {
     var option_waiting_value: ?*Option = null;
 
     for (args, 0..) |arg, arg_index| {
@@ -111,10 +111,10 @@ test "Parser.parse" {
 
     cmd.allow_unknown_options = true;
     var parser = Parser.init(allocator, &cmd);
-    try std.testing.expectEqual(.Help, try parse(&parser, &.{ "--o", "v", "--help" }));
-    try std.testing.expectError(Error.InvalidShortOption, parse(&parser, &.{ "-abc=value", "--o1=v1" }));
-    try std.testing.expectEqual(.Help, try parse(&parser, &.{ "--o11", "v", "--o12=v1", "arg1", "arg2", "--help" }));
-    _ = try parse(&parser, &.{ "--xyz", "=", "val", "--help" });
+    try std.testing.expectEqual(.Help, try parser.parse(&.{ "--o", "v", "--help" }));
+    try std.testing.expectError(Error.InvalidShortOption, parser.parse(&.{ "-abc=value", "--o1=v1" }));
+    try std.testing.expectEqual(.Help, try parser.parse(&.{ "--o11", "v", "--o12=v1", "arg1", "arg2", "--help" }));
+    _ = try parser.parse(&.{ "--xyz", "=", "val", "--help" });
 
     std.debug.print("\nOptionCpount: {d}\n", .{cmd.options.?.items.len});
     if (cmd.options) |options| {
@@ -129,18 +129,21 @@ test "Parser.parse subcommands" {
     var root_cmd = Command.init(allocator, "my-command", null);
     defer root_cmd.deinit();
 
-    const cmd1 = Command.init(allocator, "cmd1", struct {
+    var cmd1 = Command.init(allocator, "cmd1", struct {
         fn run(self: *Command) anyerror!i32 {
             _ = self;
             return 42;
         }
     }.run);
-    try root_cmd.addCommand(cmd1);
+    defer cmd1.deinit();
+    try root_cmd.addCommand(&cmd1);
     var parser = Parser.init(allocator, &root_cmd);
-    try std.testing.expectEqual(.Ok, try parse(&parser, &.{"cmd1"}));
+    try std.testing.expectEqual(.Ok, try parser.parse(&.{"cmd1"}));
     try std.testing.expect(root_cmd.arguments == null);
 
     try std.testing.expectEqual(@as(i32, 42), try root_cmd.run());
+
+    try std.testing.expectError(error.NonRootCommandCannotBeParsed, cmd1.parse());
 }
 
 fn findOption(self: Parser, name: []const u8) ?*Option {
