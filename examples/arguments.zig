@@ -20,6 +20,7 @@ fn commandWithArbitraryArguments(allocator: mem.Allocator) !void {
             return 0;
         }
     }.run);
+    cmd.allow_unknown_options = true;
     defer cmd.deinit();
     cmd.arguments = .{};
 
@@ -40,6 +41,7 @@ fn commandWithMaxArgumentCount(allocator: mem.Allocator) !void {
             return 0;
         }
     }.run);
+    cmd.allow_unknown_options = true;
     defer cmd.deinit();
     cmd.arguments = .{ .max_count = 2 };
 
@@ -62,6 +64,7 @@ fn commandWithMinArgumentCount(allocator: mem.Allocator) !void {
             return 0;
         }
     }.run);
+    cmd.allow_unknown_options = true;
     defer cmd.deinit();
     cmd.arguments = .{ .min_count = 10 };
 

@@ -142,7 +142,7 @@ test "Option.set" {
     var o1 = try Option.init(allocator, ValueType.String, &[_][]const u8{ "o", "option" }, null);
     defer Option.destroy(o1);
     try o1.set("value");
-    try testing.expectEqualStrings("value", o1.getString());
+    try testing.expectEqualStrings("value", o1.getString().?);
 
     var o2 = try Option.init(allocator, ValueType.Integer, &[_][]const u8{ "o", "option" }, null);
     defer Option.destroy(o2);
@@ -168,7 +168,7 @@ test "Option.set" {
     };
     const s = struct {
         pub fn validation(self: Option) E!void {
-            if (self.getInt() > 10) return error.InvalidOptionValue;
+            if (self.getInt().? > 10) return error.InvalidOptionValue;
         }
     };
     o4.validation = s.validation;
