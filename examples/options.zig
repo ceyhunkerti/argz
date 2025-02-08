@@ -21,7 +21,7 @@ pub fn main() !void {
         fn run(self: *Command) anyerror!i32 {
             if (self.options) |options| for (options.items, 0..) |o, i| {
                 const val = val: {
-                    switch (o.get()) {
+                    switch (o.get().?) {
                         .String => |s| break :val try self.allocator.dupe(u8, s),
                         .Integer => |n| break :val try std.fmt.allocPrint(self.allocator, "{d}", .{n}),
                         .Boolean => |b| break :val try std.fmt.allocPrint(self.allocator, "{any}", .{b}),

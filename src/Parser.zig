@@ -85,7 +85,7 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                     }
                     try self.command.addOption(new_option);
                 } else {
-                    std.debug.print("Unknown option: {s}\n", .{arg});
+                    std.debug.print("Unknown option: {s}\n", .{token.key() catch arg});
                     return error.UnknownOption;
                 }
             }
