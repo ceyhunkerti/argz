@@ -123,7 +123,7 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
 test "Parser.parse" {
     const allocator = std.testing.allocator;
     var cmd = Command.init(allocator, "my-command", struct {
-        fn run(self: *Command, ctx: ?*anyopaque) anyerror!i32 {
+        fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
             _ = self;
             _ = ctx;
             return 0;
@@ -157,7 +157,7 @@ test "Parser.parse subcommands" {
     };
 
     var cmd1 = Command.init(allocator, "cmd1", struct {
-        fn run(cmd: *Command, ctx: ?*anyopaque) anyerror!i32 {
+        fn run(cmd: *const Command, ctx: ?*anyopaque) anyerror!i32 {
             _ = cmd;
             if (ctx == null) return -1;
             const a: *arg = @ptrCast(@alignCast(ctx.?));

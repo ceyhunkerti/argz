@@ -21,7 +21,8 @@ pub fn main() !void {
     defer root.deinit();
 
     var cmd = Command.init(allocator, "subcommand", struct {
-        fn run(self: *Command) anyerror!i32 {
+        fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
+            _ = ctx;
             if (self.options) |options| for (options.items, 0..) |o, i| {
                 const val = val: {
                     switch (o.get().?) {
@@ -54,6 +55,6 @@ pub fn main() !void {
     try cmd.addOption(str_op);
 
     try root.parse();
-    const res = try root.run();
+    const res = try root.run(null);
     std.debug.assert(res == 0);
 }
