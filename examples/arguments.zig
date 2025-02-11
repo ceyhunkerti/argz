@@ -13,7 +13,8 @@ fn commandWithArbitraryArguments(allocator: mem.Allocator) !void {
     std.debug.print("\n=== Command with arbitrary number of arguments. ===\n", .{});
 
     var cmd = Command.init(allocator, "mycommand", struct {
-        fn run(self: *Command) anyerror!i32 {
+        fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
+            _ = ctx;
             if (self.argumentValues()) |values| for (values, 0..) |a, i| {
                 print("Argument {d}: {s}\n", .{ i, a.String });
             };
@@ -25,7 +26,7 @@ fn commandWithArbitraryArguments(allocator: mem.Allocator) !void {
     cmd.arguments = .{};
 
     try cmd.parse();
-    const res = try cmd.run();
+    const res = try cmd.run(null);
     std.debug.assert(res == 0);
 }
 
@@ -34,7 +35,8 @@ fn commandWithMaxArgumentCount(allocator: mem.Allocator) !void {
     std.debug.print("\n=== Command with max argument count. ===\n", .{});
 
     var cmd = Command.init(allocator, "mycommand", struct {
-        fn run(self: *Command) anyerror!i32 {
+        fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
+            _ = ctx;
             if (self.argumentValues()) |values| for (values, 0..) |a, i| {
                 print("Argument {d}: {s}\n", .{ i, a.String });
             };
@@ -57,7 +59,8 @@ fn commandWithMinArgumentCount(allocator: mem.Allocator) !void {
     std.debug.print("\n=== Command with min argument count. ===\n", .{});
 
     var cmd = Command.init(allocator, "mycommand", struct {
-        fn run(self: *Command) anyerror!i32 {
+        fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
+            _ = ctx;
             if (self.argumentValues()) |values| for (values, 0..) |a, i| {
                 print("Argument {d}: {s}\n", .{ i, a.String });
             };

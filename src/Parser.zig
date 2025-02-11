@@ -123,8 +123,9 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
 test "Parser.parse" {
     const allocator = std.testing.allocator;
     var cmd = Command.init(allocator, "my-command", struct {
-        fn run(self: *Command) anyerror!i32 {
+        fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
             _ = self;
+            _ = ctx;
             return 0;
         }
     }.run);
@@ -151,10 +152,16 @@ test "Parser.parse subcommands" {
     var root_cmd = Command.init(allocator, "my-command", null);
     defer root_cmd.deinit();
 
+    const arg = struct {
+        arg: u8 = 42,
+    };
+
     var cmd1 = Command.init(allocator, "cmd1", struct {
-        fn run(self: *Command) anyerror!i32 {
-            _ = self;
-            return 42;
+        fn run(cmd: *const Command, ctx: ?*anyopaque) anyerror!i32 {
+            _ = cmd;
+            if (ctx == null) return -1;
+            const a: *arg = @ptrCast(@alignCast(ctx.?));
+            return a.arg;
         }
     }.run);
     defer cmd1.deinit();
@@ -163,7 +170,9 @@ test "Parser.parse subcommands" {
     try std.testing.expectEqual(.Ok, try parser.parse(&.{"cmd1"}));
     try std.testing.expect(root_cmd.arguments == null);
 
-    try std.testing.expectEqual(@as(i32, 42), try root_cmd.run());
+    var args = arg{ .arg = 42 };
+
+    try std.testing.expectEqual(@as(i32, 42), try root_cmd.run(&args));
 
     try std.testing.expectError(error.NonRootCommandCannotBeParsed, cmd1.parse());
 }

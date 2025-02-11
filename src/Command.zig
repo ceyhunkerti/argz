@@ -87,7 +87,7 @@ arguments: ?Arguments = null,
 validation: ?*const fn (self: Command) anyerror!void = null,
 
 // custom run function for this command.
-runner: ?*const fn (self: *Command) anyerror!i32 = null,
+runner: ?*const fn (self: *const Command, ctx: ?*anyopaque) anyerror!i32 = null,
 
 // custom help string generator. owner must deallocate the returned memory!
 helpgen: ?*const fn (cmd: Command) anyerror![]const u8 = null,
@@ -110,7 +110,7 @@ _is_root: bool = true,
 _help_requested: bool = false,
 
 // If command parameter is a group command you can set it to null in most of the cases.
-pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self: *Command) anyerror!i32) Command {
+pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self: *const Command, ctx: ?*anyopaque) anyerror!i32) Command {
     return Command{
         .allocator = allocator,
         .name = name,
@@ -139,20 +139,20 @@ pub fn deinit(self: Command) void {
 // if it's not null it calls the runner function then calls the sub-commands in order.
 // From the list of the sub commands only one command is marked as "active" during the parse step.
 // Only the active command is then called.
-pub fn run(self: *Command) anyerror!i32 {
+pub fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
 
     // if help is requested just return 0
     // help is printed during parse phase
     if (self._help_requested) return 0;
 
     if (self.runner) |runner| {
-        return runner(self);
+        return runner(self, ctx);
     }
     if (self._commands) |commands| {
         for (commands.items) |command| {
             // from the list of sub commands only the active command can be run
             // there can be only one active command in the sub command list.
-            if (command._active) return try command.run();
+            if (command._active) return try command.run(ctx);
         }
     }
 
@@ -164,7 +164,7 @@ test "Command.run" {
     var cmd = Command.init(allocator, "my-command", null);
 
     try std.testing.expectEqualStrings("my-command", cmd.name);
-    try std.testing.expect(try cmd.run() == 0);
+    try std.testing.expect(try cmd.run(null) == 0);
 }
 
 // Only the root command is parsable
