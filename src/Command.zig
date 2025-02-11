@@ -110,15 +110,17 @@ _is_root: bool = true,
 _help_requested: bool = false,
 
 // If command parameter is a group command you can set it to null in most of the cases.
-pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self: *const Command, ctx: ?*anyopaque) anyerror!i32) Command {
-    return Command{
+pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self: *const Command, ctx: ?*anyopaque) anyerror!i32) *Command {
+    const cmd = allocator.create(Command) catch unreachable;
+    cmd.* = .{
         .allocator = allocator,
         .name = name,
         .runner = runner,
     };
+    return cmd;
 }
 
-pub fn deinit(self: Command) void {
+pub fn deinit(self: *Command) void {
     if (self.options) |options| {
         for (options.items) |option| {
             option.deinit();
@@ -133,6 +135,7 @@ pub fn deinit(self: Command) void {
         }
         commands.deinit();
     }
+    self.allocator.destroy(self);
 }
 
 // command first checks if it's runner function is not null
@@ -162,6 +165,7 @@ pub fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
 test "Command.run" {
     const allocator = std.testing.allocator;
     var cmd = Command.init(allocator, "my-command", null);
+    defer cmd.deinit();
 
     try std.testing.expectEqualStrings("my-command", cmd.name);
     try std.testing.expect(try cmd.run(null) == 0);
