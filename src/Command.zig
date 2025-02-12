@@ -42,6 +42,9 @@ pub const Arguments = struct {
     // If we receive more than this number of arguments we generate an error in the parse step.
     max_count: u8 = std.math.maxInt(u8),
 
+    // if count is provided check this first.
+    count: ?u8 = null,
+
     // internal values
     _values: ?std.ArrayList(ArgumentValue) = null,
 
@@ -251,6 +254,11 @@ pub fn addArgument(self: *Command, argument: []const u8) !void {
         if (args._values == null) {
             args._values = std.ArrayList(ArgumentValue).init(self.allocator);
         }
+        if (args.count) |count| {
+            if (args._values.?.items.len == count) {
+                return error.ArgumentCountOverflow;
+            }
+        }
         if (args._values.?.items.len == args.max_count) {
             return error.ArgumentCountOverflow;
         }
@@ -323,7 +331,17 @@ pub fn printHelp(self: *Command) !void {
 
 pub fn validate(self: Command) !void {
     if (self.arguments) |args| {
-        if (args.min_count > 0 and (args._values == null or args._values.?.items.len < args.min_count)) {
+        if (args.count) |count| {
+            if (count != 0) {
+                if (args._values == null or args._values.?.items.len != count) {
+                    return error.InvalidArgumentCount;
+                }
+            } else {
+                if (args._values != null or args._values.?.items.len != 0) {
+                    return error.InvalidArgumentCount;
+                }
+            }
+        } else if (args.min_count > 0 and (args._values == null or args._values.?.items.len < args.min_count)) {
             return error.MissingArguments;
         }
     }
