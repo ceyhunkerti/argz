@@ -55,8 +55,9 @@ pub const Arguments = struct {
         }
     }
 
-    pub fn values(self: Arguments) []ArgumentValue {
+    pub fn values(self: Arguments) ?[]ArgumentValue {
         if (self._values) |vals| return vals.items;
+        return null;
     }
 };
 
