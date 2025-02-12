@@ -16,6 +16,7 @@ pub const Error = error{
     InvalidArgumentLimits,
     MissingArguments,
     MissingRequiredOption,
+    OptionNotFound,
 };
 
 // Arguments are typed
@@ -240,6 +241,15 @@ pub fn findOption(self: *Command, names: []const []const u8) ?*Option {
         }
     }
     return null;
+}
+
+pub fn getOption(self: *Command, name: []const u8) !*Option {
+    if (self.options) |options| {
+        for (options.items) |option| {
+            for (option.names.items) |n| if (mem.eql(u8, n, name)) return option;
+        }
+    }
+    return Error.OptionNotFound;
 }
 
 // Find the subcommand from this commands commands list.
