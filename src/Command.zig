@@ -32,6 +32,7 @@ const ArgumentValue = union(ArgumentType) {
 };
 
 pub const Arguments = struct {
+
     // Default argument type is string.
     type: ArgumentType = .String,
 
@@ -296,16 +297,44 @@ pub fn printHelp(self: *Command) !void {
         return;
     }
 
-    std.debug.print("\nCommand: {s}\n", .{self.name});
+    var output = std.ArrayList(u8).init(self.allocator);
+    defer output.deinit();
+
+    try output.appendSlice("Usage: ");
+    try output.appendSlice(self.name);
+
+    if (self.arguments) |_| {
+        try output.appendSlice(" [arguments]");
+    }
+    if (self.options) |_| {
+        try output.appendSlice(" [options]");
+    }
+    if (self._commands) |_| {
+        try output.appendSlice(" [sub-commands]");
+    }
+
+    try output.appendSlice("\n");
+
+    if (self._commands) |commands| {
+        try output.appendSlice("\nSub commands:\n");
+        for (commands.items) |command| {
+            try output.appendSlice(" - ");
+            try output.appendSlice(command.name);
+            try output.appendSlice("\n");
+        }
+    }
+
     if (self.arguments) |args| {
-        if (args.min_count > 0) {
-            std.debug.print("Arguments (min: {d}, max: {d}): \n", .{ args.min_count, args.max_count });
+        if (args.count) |arg_count| {
+            try output.writer().print("Argument count: {d} \n", .{arg_count});
+        } else if (args.min_count > 0) {
+            try output.writer().print("Argument count (min: {d}, max: {d}) \n", .{ args.min_count, args.max_count });
         } else {
-            std.debug.print("Arguments (max: {d}): \n", .{args.max_count});
+            try output.writer().print("Argument count (max: {d}) \n", .{args.max_count});
         }
     }
     if (self.options) |options| {
-        std.debug.print("\nOptions:\n", .{});
+        try output.writer().print("\nOptions:\n", .{});
 
         for (options.items) |option| {
             var line = std.ArrayList(u8).init(self.allocator);
@@ -328,15 +357,17 @@ pub fn printHelp(self: *Command) !void {
                 }
                 try line.appendSlice(desc);
             }
-            std.debug.print("{s}\n", .{line.items});
+            try output.writer().print("{s}\n", .{line.items});
         }
         if (self.examples) |examples| {
-            std.debug.print("\nExamples:\n", .{});
+            try output.writer().print("\nExamples:\n", .{});
             for (examples) |example| {
-                std.debug.print("{s}\n", .{example});
+                try output.writer().print("{s}\n", .{example});
             }
         }
     }
+    try output.writer().print("\n", .{});
+    std.debug.print("{s}", .{output.items});
 }
 
 pub fn validate(self: Command) !void {
