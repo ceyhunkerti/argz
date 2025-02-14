@@ -5,10 +5,11 @@ const Command = @This();
 const std = @import("std");
 const mem = std.mem;
 const Option = @import("Option.zig");
+const Argument = @import("Argument.zig");
 const Parser = @import("Parser.zig");
 
 pub const Error = error{
-    ArgumentCountOverflow,
+    UnexpectedArgument,
     CommandNotExpectingArguments,
     MultiOptionIsNotSupported,
     CommandAlreadyExists,
@@ -17,54 +18,7 @@ pub const Error = error{
     MissingArguments,
     MissingRequiredOption,
     OptionNotFound,
-};
-
-// Arguments are typed
-// Arguments generate parse error if we encounter an argument that is not of the expected type
-const ArgumentType = enum { String, Integer, Boolean };
-
-// Union of the possible argument types
-const ArgumentValue = union(ArgumentType) {
-    String: []const u8,
-    Integer: i32,
-    // ! case sensitive "true" is considered as true anything else is false
-    Boolean: bool,
-};
-
-pub const Arguments = struct {
-
-    // Default argument type is string.
-    type: ArgumentType = .String,
-
-    // min_count and max_count are inclusive
-    // if min count is let's say 4 and we got only 3 arguments
-    // todo: we generate an error in the validation step
-    min_count: u8 = 0,
-
-    // If we receive more than this number of arguments we generate an error in the parse step.
-    max_count: u8 = std.math.maxInt(u8),
-
-    // if count is provided check this first.
-    count: ?u8 = null,
-
-    // internal values
-    _values: ?std.ArrayList(ArgumentValue) = null,
-
-    pub fn deinit(self: Arguments, allocator: mem.Allocator) void {
-        if (self._values) |vals| {
-            for (vals.items) |v| switch (v) {
-                .String => allocator.free(v.String),
-                else => {},
-            };
-            vals.deinit();
-        }
-    }
-
-    pub fn values(self: Arguments) ?[]ArgumentValue {
-        if (self._values) |vals| return vals.items;
-        return null;
-    }
-};
+} || Argument.Error;
 
 allocator: mem.Allocator,
 
@@ -75,18 +29,18 @@ name: []const u8,
 // option names should be unique for the attached command.
 // different options attached to the same command can not have the same name in their `names` list.
 // Options are heap allocated and must be deallocated by the owner command.
-options: ?std.ArrayList(*Option) = null,
+options: ?std.ArrayList(Option) = null,
 
 // description of the command
 description: ?[]const u8 = null,
 
 // list of subcommands for this command.
 // use `addCommand` to add subcommands
-_commands: ?std.ArrayList(*Command) = null,
+commands: ?std.ArrayList(Command) = null,
 
 // null means we don't want arguments
 // initialize it with arguments if you accept arguments
-arguments: ?Arguments = null,
+arguments: ?std.ArrayList(Argument) = null,
 
 // custom validation function for this command
 // todo: will be called within the validate command
@@ -116,32 +70,33 @@ _is_root: bool = true,
 _help_requested: bool = false,
 
 // If command parameter is a group command you can set it to null in most of the cases.
-pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self: *const Command, ctx: ?*anyopaque) anyerror!i32) *Command {
-    const cmd = allocator.create(Command) catch unreachable;
-    cmd.* = .{
+pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self: *const Command, ctx: ?*anyopaque) anyerror!i32) Command {
+    return .{
         .allocator = allocator,
         .name = name,
         .runner = runner,
     };
-    return cmd;
 }
 
 pub fn deinit(self: *Command) void {
     if (self.options) |options| {
-        for (options.items) |option| {
+        for (options.items) |*option| {
             option.deinit();
-            self.allocator.destroy(option);
         }
         options.deinit();
     }
-    if (self.arguments) |args| args.deinit(self.allocator);
-    if (self._commands) |commands| {
-        for (commands.items) |command| {
+    if (self.arguments) |args| {
+        for (args.items) |*arg| {
+            arg.deinit();
+        }
+        args.deinit();
+    }
+    if (self.commands) |commands| {
+        for (commands.items) |*command| {
             command.deinit();
         }
         commands.deinit();
     }
-    self.allocator.destroy(self);
 }
 
 // command first checks if it's runner function is not null
@@ -157,8 +112,8 @@ pub fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
     if (self.runner) |runner| {
         return runner(self, ctx);
     }
-    if (self._commands) |commands| {
-        for (commands.items) |command| {
+    if (self.commands) |commands| {
+        for (commands.items) |*command| {
             // from the list of sub commands only the active command can be run
             // there can be only one active command in the sub command list.
             if (command._active) return try command.run(ctx);
@@ -180,13 +135,6 @@ test "Command.run" {
 // Only the root command is parsable
 // ! You should call this only for the root command.
 pub fn parse(self: *Command) !void {
-    // pre checks
-    if (self.arguments) |args| {
-        if (args.min_count > args.max_count) {
-            return Error.InvalidArgumentLimits;
-        }
-    }
-
     if (!self._is_root) return Error.NonRootCommandCannotBeParsed;
 
     // parse the process arguments
@@ -211,33 +159,33 @@ pub fn parse(self: *Command) !void {
 
 // Add subcommand to this command. Sub command names must be unique!
 pub fn addCommand(self: *Command, command: *Command) !void {
-    if (self._commands == null) {
-        self._commands = std.ArrayList(*Command).init(self.allocator);
+    if (self.commands == null) {
+        self.commands = std.ArrayList(Command).init(self.allocator);
     } else {
         if (self.findSubCommand(command.name) != null) {
             return error.CommandAlreadyExists;
         }
     }
     command._is_root = false;
-    try self._commands.?.append(command);
+    try self.commands.?.append(command.*);
 }
 
 // Add option to this command. Option names must be unique!
 pub fn addOption(self: *Command, option: *Option) !void {
     if (self.options == null) {
-        self.options = std.ArrayList(*Option).init(self.allocator);
+        self.options = std.ArrayList(Option).init(self.allocator);
     } else {
         if (self.findOption(option.names.items) != null) {
             return error.MultiOptionIsNotSupported;
         }
     }
-    try self.options.?.append(option);
+    try self.options.?.append(option.*);
 }
 
 // Find the option with one of possible names of it.
 pub fn findOption(self: Command, names: []const []const u8) ?*Option {
     if (self.options) |options| {
-        for (options.items) |option| {
+        for (options.items) |*option| {
             for (names) |name| if (mem.eql(u8, option.names.items[0], name)) return option;
         }
     }
@@ -255,36 +203,52 @@ pub fn getOption(self: Command, name: []const u8) !*Option {
 
 // Find the subcommand from this commands commands list.
 pub fn findSubCommand(self: *Command, name: []const u8) ?*Command {
-    if (self._commands) |subs| for (subs.items) |s| if (mem.eql(u8, s.name, name)) return s;
+    if (self.commands) |subs| for (subs.items) |*s| if (mem.eql(u8, s.name, name)) return s;
     return null;
 }
 
-// Adds arguments to this command.
-pub fn addArgument(self: *Command, argument: []const u8) !void {
-    if (self.arguments) |*args| {
-        if (args._values == null) {
-            args._values = std.ArrayList(ArgumentValue).init(self.allocator);
-        }
-        if (args.count) |count| {
-            if (args._values.?.items.len == count) {
-                return error.ArgumentCountOverflow;
-            }
-        }
-        if (args._values.?.items.len == args.max_count) {
-            return error.ArgumentCountOverflow;
-        }
-        switch (args.type) {
-            .String => try args._values.?.append(ArgumentValue{ .String = try self.allocator.dupe(u8, argument) }),
-            .Integer => try args._values.?.append(ArgumentValue{ .Integer = try std.fmt.parseInt(i32, argument, 10) }),
-            .Boolean => try args._values.?.append(ArgumentValue{ .Boolean = mem.eql(u8, argument, "true") }),
-        }
-    } else {
-        return Error.CommandNotExpectingArguments;
+pub fn addArgument(self: *Command, argument: Argument) !void {
+    if (self.arguments == null) {
+        self.arguments = std.ArrayList(Argument).init(self.allocator);
     }
+    try self.arguments.?.append(argument);
 }
 
-pub fn argumentValues(self: Command) ?[]ArgumentValue {
-    if (self.arguments) |args| return args._values.?.items;
+pub fn addArguments(self: *Command, arguments: []const Argument) !void {
+    if (self.arguments == null) {
+        self.arguments = std.ArrayList(Argument).init(self.allocator);
+    }
+    try self.arguments.?.appendSlice(arguments);
+}
+
+// Adds arguments to this command.
+pub fn setArgument(self: *Command, value: []const u8) !void {
+    if (self.arguments == null) {
+        return error.CommandNotExpectingArguments;
+    }
+
+    var argument_set = false;
+    set_arg: for (self.arguments.?.items) |*argument| {
+        if (argument._value == null) {
+            try argument.setValue(value);
+            argument_set = true;
+            break :set_arg;
+        } else if (argument.isArrayType()) {
+            argument.setValue(value) catch |err| {
+                if (err == Argument.Error.TooManyValues) {
+                    continue :set_arg;
+                }
+                return err;
+            };
+            argument_set = true;
+            break :set_arg;
+        }
+    }
+    if (!argument_set) return Error.UnexpectedArgument;
+}
+
+pub fn argumentValues(self: Command) ?[]Argument.Value {
+    if (self.arguments) |args| return args.values.?.items;
     return null;
 }
 
@@ -309,13 +273,13 @@ pub fn printHelp(self: *Command) !void {
     if (self.options) |_| {
         try output.appendSlice(" [options]");
     }
-    if (self._commands) |_| {
+    if (self.commands) |_| {
         try output.appendSlice(" [sub-commands]");
     }
 
     try output.appendSlice("\n");
 
-    if (self._commands) |commands| {
+    if (self.commands) |commands| {
         try output.appendSlice("\nSub commands:\n");
         for (commands.items) |command| {
             try output.appendSlice(" - ");
@@ -324,15 +288,15 @@ pub fn printHelp(self: *Command) !void {
         }
     }
 
-    if (self.arguments) |args| {
-        if (args.count) |arg_count| {
-            try output.writer().print("Argument count: {d} \n", .{arg_count});
-        } else if (args.min_count > 0) {
-            try output.writer().print("Argument count (min: {d}, max: {d}) \n", .{ args.min_count, args.max_count });
-        } else {
-            try output.writer().print("Argument count (max: {d}) \n", .{args.max_count});
-        }
-    }
+    // if (self.arguments) |args| {
+    //     if (args.count) |arg_count| {
+    //         try output.writer().print("Argument count: {d} \n", .{arg_count});
+    //     } else if (args.min_count > 0) {
+    //         try output.writer().print("Argument count (min: {d}, max: {d}) \n", .{ args.min_count, args.max_count });
+    //     } else {
+    //         try output.writer().print("Argument count (max: {d}) \n", .{args.max_count});
+    //     }
+    // }
     if (self.options) |options| {
         try output.writer().print("\nOptions:\n", .{});
 
@@ -372,18 +336,8 @@ pub fn printHelp(self: *Command) !void {
 
 pub fn validate(self: Command) !void {
     if (self.arguments) |args| {
-        if (args.count) |count| {
-            if (count != 0) {
-                if (args._values == null or args._values.?.items.len != count) {
-                    return error.InvalidArgumentCount;
-                }
-            } else {
-                if (args._values != null or args._values.?.items.len != 0) {
-                    return error.InvalidArgumentCount;
-                }
-            }
-        } else if (args.min_count > 0 and (args._values == null or args._values.?.items.len < args.min_count)) {
-            return error.MissingArguments;
+        for (args.items) |arg| {
+            try arg.validate();
         }
     }
     if (self.options) |options| {

@@ -4,6 +4,7 @@ const std = @import("std");
 const Command = @import("Command.zig");
 const Option = @import("Option.zig");
 const Token = @import("Token.zig");
+const Argument = @import("Argument.zig");
 
 pub const Error = error{
     ExpectingValue,
@@ -30,8 +31,6 @@ pub fn init(allocator: std.mem.Allocator, command: *Command) Parser {
 }
 
 pub fn parse(self: *Parser, args: []const []const u8) !Result {
-    var option_waiting_value: ?*Option = null;
-
     for (args, 0..) |arg, arg_index| {
         if (arg.len == 0) continue;
         var token = Token.init(self.allocator, arg);
@@ -60,7 +59,6 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                 if (token.isKeyValue()) {
                     try option.set(try token.value());
                 } else {
-                    option_waiting_value = option;
                     self.state = .expecting_value;
                 }
             } else {
@@ -69,21 +67,23 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                         // only long format is allowed for unknown options
                         return error.UnknownNotLongOption;
                     }
+
+                    // var new_option = try self.allocator.create(Option);
+                    // errdefer self.allocator.destroy(new_option);
+
                     var new_option = try Option.init(self.allocator, Option.ValueType.String, &.{try token.key()}, "Unknown option");
                     new_option._is_unknown_option = true;
 
                     errdefer {
                         new_option.deinit();
-                        self.allocator.destroy(new_option);
                     }
                     if (token.isKeyValue()) {
                         try new_option.set(try token.value());
                         self.state = .void;
                     } else {
-                        option_waiting_value = new_option;
                         self.state = .expecting_value;
                     }
-                    try self.command.addOption(new_option);
+                    try self.command.addOption(&new_option);
                 } else {
                     std.debug.print("Unknown option: {s}\n", .{token.key() catch arg});
                     return error.UnknownOption;
@@ -102,9 +102,8 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                 }
             }
         } else if (token.isAtom()) {
-            if (option_waiting_value) |option| {
-                try option.set(try token.key());
-                option_waiting_value = null;
+            if (self.state == .expecting_value) {
+                try self.command.options.?.items[self.command.options.?.items.len - 1].set(try token.key());
                 self.state = .void;
             } else if (self.command.findSubCommand(try token.key())) |sub| {
                 sub._active = true;
@@ -113,7 +112,7 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                     return try self.parse(args[arg_index + 1 ..]);
                 }
             } else {
-                try self.command.addArgument(try token.key());
+                try self.command.setArgument(try token.key());
             }
         }
     }
@@ -129,16 +128,24 @@ test "Parser.parse" {
             return 0;
         }
     }.run);
-    cmd.arguments = .{};
     defer cmd.deinit();
 
     cmd.allow_unknown_options = true;
-    var parser = Parser.init(allocator, cmd);
+    var parser = Parser.init(allocator, &cmd);
 
     try std.testing.expectEqual(.Help, try parser.parse(&.{ "--o", "v", "--help" }));
     try std.testing.expectError(Error.InvalidShortOption, parser.parse(&.{ "-abc=value", "--o1=v1" }));
-    try std.testing.expectEqual(.Help, try parser.parse(&.{ "--o11", "v", "--o12=v1", "arg1", "arg2", "--help" }));
-    _ = try parser.parse(&.{ "--xyz", "=", "val", "--help" });
+
+    try cmd.addArguments(&.{
+        try Argument.init(allocator, "ARG_NAME", .String, null, null, null),
+        try Argument.init(allocator, "ARG_NAME2", .String, null, null, null),
+        try Argument.init(allocator, "ARG_NAME2", .String, null, null, true),
+    });
+
+    try std.testing.expectEqual(.Ok, try parser.parse(&.{ "--o11", "v", "--o12=v1", "arg1", "arg2" }));
+    try std.testing.expectError(error.MissingRequiredArgument, cmd.validate());
+
+    // _ = try parser.parse(&.{ "--xyz", "=", "val", "--help" });
 
     // if (cmd.options) |options| {
     //     for (options.items) |option| {
@@ -164,8 +171,8 @@ test "Parser.parse subcommands" {
             return a.arg;
         }
     }.run);
-    try root_cmd.addCommand(cmd1);
-    var parser = Parser.init(allocator, root_cmd);
+    try root_cmd.addCommand(&cmd1);
+    var parser = Parser.init(allocator, &root_cmd);
     try std.testing.expectEqual(.Ok, try parser.parse(&.{"cmd1"}));
     try std.testing.expect(root_cmd.arguments == null);
 
@@ -177,6 +184,6 @@ test "Parser.parse subcommands" {
 }
 
 fn findOption(self: Parser, name: []const u8) ?*Option {
-    if (self.command.options) |options| for (options.items) |o| if (o.hasName(name)) return o;
+    if (self.command.options) |options| for (options.items) |*o| if (o.hasName(name)) return o;
     return null;
 }
