@@ -11,6 +11,7 @@ pub const Error = error{
     UnknownNotLongOption,
     UnknownOption,
     FailedToParseChainedOptions,
+    UnexpectedArgument,
 } || Token.Error;
 
 const State = enum {
@@ -83,7 +84,7 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                     } else {
                         self.state = .expecting_value;
                     }
-                    try self.command.addOption(&new_option);
+                    try self.command.addOption(new_option);
                 } else {
                     std.debug.print("Unknown option: {s}\n", .{token.key() catch arg});
                     return error.UnknownOption;
@@ -112,7 +113,7 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                     return try self.parse(args[arg_index + 1 ..]);
                 }
             } else {
-                try self.command.setArgument(try token.key());
+                try self.setArgument(try token.key());
             }
         }
     }
@@ -145,13 +146,38 @@ test "Parser.parse" {
     try std.testing.expectEqual(.Ok, try parser.parse(&.{ "--o11", "v", "--o12=v1", "arg1", "arg2" }));
     try std.testing.expectError(error.MissingRequiredArgument, cmd.validate());
 
-    // _ = try parser.parse(&.{ "--xyz", "=", "val", "--help" });
+    _ = try parser.parse(&.{ "--xyz", "=", "val", "--help" });
 
     // if (cmd.options) |options| {
     //     for (options.items) |option| {
     //         std.debug.print("\nOption:  {s} {any}\n", .{ option.names.items[0], option.get() });
     //     }
     // }
+}
+
+fn setArgument(self: *Parser, value: []const u8) !void {
+    if (self.command.arguments == null) {
+        return error.CommandNotExpectingArguments;
+    }
+
+    var argument_set = false;
+    set_arg: for (self.command.arguments.?.items) |*argument| {
+        if (argument._value == null) {
+            try argument.setValue(value);
+            argument_set = true;
+            break :set_arg;
+        } else if (argument.isArrayType()) {
+            argument.setValue(value) catch |err| {
+                if (err == Argument.Error.TooManyValues) {
+                    continue :set_arg;
+                }
+                return err;
+            };
+            argument_set = true;
+            break :set_arg;
+        }
+    }
+    if (!argument_set) return Error.UnexpectedArgument;
 }
 
 test "Parser.parse subcommands" {

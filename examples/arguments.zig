@@ -7,6 +7,7 @@ const app = @import("argz");
 
 const Command = app.Command;
 const Option = app.Option;
+const Argument = app.Argument;
 const print = std.debug.print;
 
 fn commandWithArbitraryArguments(allocator: mem.Allocator) !void {
@@ -23,7 +24,7 @@ fn commandWithArbitraryArguments(allocator: mem.Allocator) !void {
     }.run);
     cmd.allow_unknown_options = true;
     defer cmd.deinit();
-    cmd.arguments = .{};
+    try cmd.addArgument(try Argument.init(allocator, "ARG_NAME", .String, null, '*', null));
 
     try cmd.parse();
     const res = try cmd.run(null);
@@ -45,7 +46,7 @@ fn commandWithMaxArgumentCount(allocator: mem.Allocator) !void {
     }.run);
     cmd.allow_unknown_options = true;
     defer cmd.deinit();
-    cmd.arguments = .{ .max_count = 2 };
+    try cmd.addArgument(try Argument.init(allocator, "ARG_NAME", .String, null, 2, null));
 
     if (cmd.parse() == error.ArgumentCountOverflow) {
         print("Argument count overflow!\n", .{});
@@ -69,7 +70,13 @@ fn commandWithMinArgumentCount(allocator: mem.Allocator) !void {
     }.run);
     cmd.allow_unknown_options = true;
     defer cmd.deinit();
-    cmd.arguments = .{ .min_count = 10 };
+    try cmd.addArguments(
+        &.{
+            try Argument.init(allocator, "ARG_NAME", .String, null, null, null),
+            try Argument.init(allocator, "ARG_NAME2", .String, null, null, null),
+            try Argument.init(allocator, "ARG_NAME2", .String, null, null, true),
+        },
+    );
 
     const parse_result = cmd.parse();
     if (parse_result == error.MissingArguments) {

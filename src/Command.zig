@@ -9,7 +9,6 @@ const Argument = @import("Argument.zig");
 const Parser = @import("Parser.zig");
 
 pub const Error = error{
-    UnexpectedArgument,
     CommandNotExpectingArguments,
     MultiOptionIsNotSupported,
     CommandAlreadyExists,
@@ -171,7 +170,7 @@ pub fn addCommand(self: *Command, command: *Command) !void {
 }
 
 // Add option to this command. Option names must be unique!
-pub fn addOption(self: *Command, option: *Option) !void {
+pub fn addOption(self: *Command, option: Option) !void {
     if (self.options == null) {
         self.options = std.ArrayList(Option).init(self.allocator);
     } else {
@@ -179,7 +178,14 @@ pub fn addOption(self: *Command, option: *Option) !void {
             return error.MultiOptionIsNotSupported;
         }
     }
-    try self.options.?.append(option.*);
+    try self.options.?.append(option);
+}
+
+pub fn addOptions(self: *Command, options: []const Option) !void {
+    if (self.options == null) {
+        self.options = std.ArrayList(Option).init(self.allocator);
+    }
+    try self.options.?.appendSlice(options);
 }
 
 // Find the option with one of possible names of it.
@@ -219,32 +225,6 @@ pub fn addArguments(self: *Command, arguments: []const Argument) !void {
         self.arguments = std.ArrayList(Argument).init(self.allocator);
     }
     try self.arguments.?.appendSlice(arguments);
-}
-
-// Adds arguments to this command.
-pub fn setArgument(self: *Command, value: []const u8) !void {
-    if (self.arguments == null) {
-        return error.CommandNotExpectingArguments;
-    }
-
-    var argument_set = false;
-    set_arg: for (self.arguments.?.items) |*argument| {
-        if (argument._value == null) {
-            try argument.setValue(value);
-            argument_set = true;
-            break :set_arg;
-        } else if (argument.isArrayType()) {
-            argument.setValue(value) catch |err| {
-                if (err == Argument.Error.TooManyValues) {
-                    continue :set_arg;
-                }
-                return err;
-            };
-            argument_set = true;
-            break :set_arg;
-        }
-    }
-    if (!argument_set) return Error.UnexpectedArgument;
 }
 
 pub fn argumentValues(self: Command) ?[]Argument.Value {
