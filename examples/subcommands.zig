@@ -39,7 +39,7 @@ pub fn main() !void {
         }
     }.run);
 
-    try root.addCommand(cmd);
+    try root.addCommand(&cmd);
 
     // we allow unknown options here
     cmd.allow_unknown_options = true;
@@ -47,7 +47,7 @@ pub fn main() !void {
     const int_op = try Option.init(allocator, .Integer, &[_][]const u8{ "int-option", "i" }, "int option description");
     try cmd.addOption(int_op);
 
-    const flag_op = try Option.init(allocator, .Boolean, &[_][]const u8{ "flag-option", "f" }, "flag option description");
+    var flag_op = try Option.init(allocator, .Boolean, &[_][]const u8{ "flag-option", "f" }, "flag option description");
     flag_op.is_flag = true;
     try cmd.addOption(flag_op);
 

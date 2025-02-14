@@ -16,9 +16,9 @@ fn commandWithArbitraryArguments(allocator: mem.Allocator) !void {
     var cmd = Command.init(allocator, "mycommand", struct {
         fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
             _ = ctx;
-            if (self.argumentValues()) |values| for (values, 0..) |a, i| {
-                print("Argument {d}: {s}\n", .{ i, a.String });
-            };
+            for (self.arguments.?.items, 0..) |a, i| {
+                print("Argument {d}: {s}\n", .{ i, a._value.?.String });
+            }
             return 0;
         }
     }.run);
@@ -31,64 +31,6 @@ fn commandWithArbitraryArguments(allocator: mem.Allocator) !void {
     std.debug.assert(res == 0);
 }
 
-fn commandWithMaxArgumentCount(allocator: mem.Allocator) !void {
-    // Command with arbitrary number of arguments.
-    std.debug.print("\n=== Command with max argument count. ===\n", .{});
-
-    var cmd = Command.init(allocator, "mycommand", struct {
-        fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
-            _ = ctx;
-            if (self.argumentValues()) |values| for (values, 0..) |a, i| {
-                print("Argument {d}: {s}\n", .{ i, a.String });
-            };
-            return 0;
-        }
-    }.run);
-    cmd.allow_unknown_options = true;
-    defer cmd.deinit();
-    try cmd.addArgument(try Argument.init(allocator, "ARG_NAME", .String, null, 2, null));
-
-    if (cmd.parse() == error.ArgumentCountOverflow) {
-        print("Argument count overflow!\n", .{});
-        print("Expecting at most {d} arguments but received more!\n", .{cmd.arguments.?.max_count});
-        return;
-    }
-}
-
-fn commandWithMinArgumentCount(allocator: mem.Allocator) !void {
-    // Command with arbitrary number of arguments.
-    std.debug.print("\n=== Command with min argument count. ===\n", .{});
-
-    var cmd = Command.init(allocator, "mycommand", struct {
-        fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
-            _ = ctx;
-            if (self.argumentValues()) |values| for (values, 0..) |a, i| {
-                print("Argument {d}: {s}\n", .{ i, a.String });
-            };
-            return 0;
-        }
-    }.run);
-    cmd.allow_unknown_options = true;
-    defer cmd.deinit();
-    try cmd.addArguments(
-        &.{
-            try Argument.init(allocator, "ARG_NAME", .String, null, null, null),
-            try Argument.init(allocator, "ARG_NAME2", .String, null, null, null),
-            try Argument.init(allocator, "ARG_NAME2", .String, null, null, true),
-        },
-    );
-
-    const parse_result = cmd.parse();
-    if (parse_result == error.MissingArguments) {
-        print("Missing arguments!\n", .{});
-        print("Expecting at least {d} arguments but received {d}!\n", .{
-            cmd.arguments.?.min_count,
-            cmd.argumentValues().?.len,
-        });
-        return;
-    }
-}
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
@@ -97,6 +39,4 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
     try commandWithArbitraryArguments(allocator);
-    try commandWithMaxArgumentCount(allocator);
-    try commandWithMinArgumentCount(allocator);
 }

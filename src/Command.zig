@@ -227,11 +227,6 @@ pub fn addArguments(self: *Command, arguments: []const Argument) !void {
     try self.arguments.?.appendSlice(arguments);
 }
 
-pub fn argumentValues(self: Command) ?[]Argument.Value {
-    if (self.arguments) |args| return args.values.?.items;
-    return null;
-}
-
 // Prints the help for this command
 pub fn printHelp(self: *Command) !void {
     if (self.helpgen) |helpgen| {

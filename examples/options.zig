@@ -47,7 +47,7 @@ pub fn main() !void {
     flag_op.is_flag = true;
     try cmd.addOption(flag_op);
 
-    const another_flag_op = try Option.init(
+    var another_flag_op = try Option.init(
         allocator,
         .Boolean,
         &[_][]const u8{ "another-flag-option", "a" },
