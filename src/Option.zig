@@ -128,7 +128,7 @@ pub fn set(self: *Option, value: []const u8) !void {
     if (self._value) |val| switch (val) {
         .String => |v| {
             std.debug.print("\nExisting: {s}  New: {s}\n", .{ v, value });
-            @panic("This shouldn't set twice");
+            @panic("Option value shouldn't set twice");
         },
         else => {},
     };
