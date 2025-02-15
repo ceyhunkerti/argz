@@ -125,6 +125,14 @@ pub fn hasName(self: Option, name: []const u8) bool {
 }
 
 pub fn set(self: *Option, value: []const u8) !void {
+    if (self._value) |val| switch (val) {
+        .String => |v| {
+            std.debug.print("\nExisting: {s}  New: {s}\n", .{ v, value });
+            @panic("This shouldn't set twice");
+        },
+        else => {},
+    };
+
     self._raw_value = value;
     self._value = switch (self.value_type) {
         .Boolean => .{ .Boolean = mem.eql(u8, value, "true") },

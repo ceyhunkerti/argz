@@ -198,9 +198,9 @@ pub fn findOption(self: Command, names: []const []const u8) ?*Option {
     return null;
 }
 
-pub fn getOption(self: Command, name: []const u8) !Option {
+pub fn getOption(self: Command, name: []const u8) !*Option {
     if (self.options) |options| {
-        for (options.items) |option| {
+        for (options.items) |*option| {
             for (option.names.items) |n| if (mem.eql(u8, n, name)) return option;
         }
     }

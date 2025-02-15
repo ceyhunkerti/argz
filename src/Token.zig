@@ -109,7 +109,7 @@ pub fn isChainedOption(self: Token) bool {
     return false;
 }
 
-pub fn isUnchainedOption(self: Token) bool {
+pub fn isUnChainedOption(self: Token) bool {
     if (self._dash == .double_dash) return true;
     if (self._dash == .single_dash) if (self._key) |k| return k.len == 1;
     return false;

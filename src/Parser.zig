@@ -32,6 +32,8 @@ pub fn init(allocator: std.mem.Allocator, command: *Command) Parser {
 }
 
 pub fn parse(self: *Parser, args: []const []const u8) !Result {
+    var option_expecting_value: []const u8 = undefined;
+
     for (args, 0..) |arg, arg_index| {
         if (arg.len == 0) continue;
         var token = Token.init(self.allocator, arg);
@@ -50,7 +52,7 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
         if (token.isOption() and self.state == .expecting_value) {
             return error.ExpectingValue;
         }
-        if (token.isUnchainedOption()) {
+        if (token.isUnChainedOption()) {
             if (self.findOption(try token.key())) |option| {
                 if (option.is_flag) {
                     try option.set("true");
@@ -59,7 +61,9 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
 
                 if (token.isKeyValue()) {
                     try option.set(try token.value());
+                    self.state = .void;
                 } else {
+                    option_expecting_value = try token.key();
                     self.state = .expecting_value;
                 }
             } else {
@@ -69,10 +73,12 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                         return error.UnknownNotLongOption;
                     }
 
-                    // var new_option = try self.allocator.create(Option);
-                    // errdefer self.allocator.destroy(new_option);
-
-                    var new_option = try Option.init(self.allocator, Option.ValueType.String, &.{try token.key()}, "Unknown option");
+                    var new_option = try Option.init(
+                        self.allocator,
+                        Option.ValueType.String,
+                        &.{try token.key()},
+                        "Unknown option",
+                    );
                     new_option._is_unknown_option = true;
 
                     errdefer {
@@ -82,6 +88,7 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
                         try new_option.set(try token.value());
                         self.state = .void;
                     } else {
+                        option_expecting_value = try token.key();
                         self.state = .expecting_value;
                     }
                     try self.command.addOption(new_option);
@@ -104,7 +111,8 @@ pub fn parse(self: *Parser, args: []const []const u8) !Result {
             }
         } else if (token.isAtom()) {
             if (self.state == .expecting_value) {
-                try self.command.options.?.items[self.command.options.?.items.len - 1].set(try token.key());
+                var option = try self.command.getOption(option_expecting_value);
+                try option.set(try token.key());
                 self.state = .void;
             } else if (self.command.findSubCommand(try token.key())) |sub| {
                 sub._active = true;
@@ -147,12 +155,38 @@ test "Parser.parse" {
     try std.testing.expectError(error.MissingRequiredArgument, cmd.validate());
 
     _ = try parser.parse(&.{ "--xyz", "=", "val", "--help" });
+}
 
-    // if (cmd.options) |options| {
-    //     for (options.items) |option| {
-    //         std.debug.print("\nOption:  {s} {any}\n", .{ option.names.items[0], option.get() });
-    //     }
-    // }
+test "Parse.withSubcommands" {
+    const allocator = std.testing.allocator;
+    var elo = Command.init(allocator, "elo", null);
+    defer elo.deinit();
+
+    var run = Command.init(allocator, "run", struct {
+        fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
+            _ = self;
+            _ = ctx;
+            return 0;
+        }
+    }.run);
+
+    try run.addOptions(&.{
+        try Option.init(allocator, .String, &[_][]const u8{"source"}, "string option description"),
+        try Option.init(allocator, .String, &[_][]const u8{"sink"}, "string option description"),
+    });
+
+    run.allow_unknown_options = true;
+    var parser = Parser.init(allocator, &elo);
+
+    try elo.addCommand(&run);
+
+    try std.testing.expectEqual(.Ok, try parser.parse(&.{
+        "",                  "run", // "" for formatting
+        "--sink",            "postgres",
+        "--sink-username",   "postgres_username",
+        "--source",          "oracle",
+        "--source-username", "oracle_username",
+    }));
 }
 
 fn setArgument(self: *Parser, value: []const u8) !void {
