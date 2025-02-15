@@ -198,7 +198,7 @@ pub fn findOption(self: Command, names: []const []const u8) ?*Option {
     return null;
 }
 
-pub fn getOption(self: Command, name: []const u8) !*Option {
+pub fn getOption(self: Command, name: []const u8) !Option {
     if (self.options) |options| {
         for (options.items) |option| {
             for (option.names.items) |n| if (mem.eql(u8, n, name)) return option;
@@ -263,15 +263,24 @@ pub fn printHelp(self: *Command) !void {
         }
     }
 
-    // if (self.arguments) |args| {
-    //     if (args.count) |arg_count| {
-    //         try output.writer().print("Argument count: {d} \n", .{arg_count});
-    //     } else if (args.min_count > 0) {
-    //         try output.writer().print("Argument count (min: {d}, max: {d}) \n", .{ args.min_count, args.max_count });
-    //     } else {
-    //         try output.writer().print("Argument count (max: {d}) \n", .{args.max_count});
-    //     }
-    // }
+    if (self.arguments) |args| {
+        try output.writer().print("\nArguments:\n", .{});
+        for (args.items) |arg| {
+            var line = std.ArrayList(u8).init(self.allocator);
+            defer line.deinit();
+            try output.appendSlice(" - ");
+            try output.appendSlice(arg.name);
+            if (arg.description) |desc| {
+                if (line.items.len < 30) {
+                    try line.appendNTimes(' ', 30 - line.items.len);
+                } else {
+                    try line.appendNTimes(' ', 1);
+                }
+                try line.appendSlice(desc);
+            }
+            try output.writer().print("{s}\n", .{line.items});
+        }
+    }
     if (self.options) |options| {
         try output.writer().print("\nOptions:\n", .{});
 

@@ -135,30 +135,35 @@ pub fn validate(self: Argument) !void {
     if (self.required and self._value == null) return Error.MissingRequiredArgument;
 }
 
-// pub fn isArgumentSet(self: Argument) bool {
-//     if (self._value == null or self._count == '*') return false;
-//     if (self._count == 1 and self._value == null) return false;
-//     if (self._count > 1) {
-//         switch (self.type) {
-//             .StringArray => return self._value.?.StringArray.items.len == self._count.?,
-//             .IntegerArray => return self._value.?.IntegerArray.items.len == self._count.?,
-//             .BooleanArray => return self._value.?.BooleanArray.items.len == self._count.?,
-//             else => unreachable,
-//         }
-//     }
-//     return true;
-// }
+pub fn getString(self: Argument) !?[]const u8 {
+    if (self._value) |v| {
+        switch (v) {
+            .String => return v.String,
+            else => unreachable,
+        }
+    } else {
+        return null;
+    }
+}
 
-// pub fn parseString(self: *Argument, value: []const u8, T: type) !T {
-//     switch (self.type) {
-//         .String,
-//         .StringArray,
-//         => return self.allocator.dupe(u8, value),
-//         .Integer,
-//         .IntegerArray,
-//         => return try std.fmt.parseInt(i32, value, 10),
-//         .Boolean,
-//         .BooleanArray,
-//         => return std.mem.eql(u8, value, "true"),
-//     }
-// }
+pub fn getBoolean(self: Argument) !?bool {
+    if (self._value) |v| {
+        switch (v) {
+            .Boolean => return v.Boolean,
+            else => unreachable,
+        }
+    } else {
+        return null;
+    }
+}
+
+pub fn getInteger(self: Argument) !?i32 {
+    if (self._value) |v| {
+        switch (v) {
+            .Integer => return v.Integer,
+            else => unreachable,
+        }
+    } else {
+        return null;
+    }
+}
