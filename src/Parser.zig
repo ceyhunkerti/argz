@@ -140,7 +140,7 @@ test "Parser.parse" {
     defer cmd.deinit();
 
     cmd.allow_unknown_options = true;
-    var parser = Parser.init(allocator, &cmd);
+    var parser = Parser.init(allocator, cmd);
 
     try std.testing.expectEqual(.Help, try parser.parse(&.{ "--o", "v", "--help" }));
     try std.testing.expectError(Error.InvalidShortOption, parser.parse(&.{ "-abc=value", "--o1=v1" }));
@@ -176,9 +176,9 @@ test "Parse.withSubcommands" {
     });
 
     run.allow_unknown_options = true;
-    var parser = Parser.init(allocator, &elo);
+    var parser = Parser.init(allocator, elo);
 
-    try elo.addCommand(&run);
+    try elo.addCommand(run);
 
     try std.testing.expectEqual(.Ok, try parser.parse(&.{
         "",                  "run", // "" for formatting
@@ -231,8 +231,8 @@ test "Parser.parse subcommands" {
             return a.arg;
         }
     }.run);
-    try root_cmd.addCommand(&cmd1);
-    var parser = Parser.init(allocator, &root_cmd);
+    try root_cmd.addCommand(cmd1);
+    var parser = Parser.init(allocator, root_cmd);
     try std.testing.expectEqual(.Ok, try parser.parse(&.{"cmd1"}));
     try std.testing.expect(root_cmd.arguments == null);
 

@@ -7,6 +7,7 @@ const mem = std.mem;
 const Option = @import("Option.zig");
 const Argument = @import("Argument.zig");
 const Parser = @import("Parser.zig");
+const Help = @import("Help.zig");
 
 pub const Error = error{
     CommandNotExpectingArguments,
@@ -35,7 +36,7 @@ description: ?[]const u8 = null,
 
 // list of subcommands for this command.
 // use `addCommand` to add subcommands
-commands: ?std.ArrayList(Command) = null,
+subcommands: ?std.ArrayList(*Command) = null,
 
 // null means we don't want arguments
 // initialize it with arguments if you accept arguments
@@ -68,13 +69,22 @@ _is_root: bool = true,
 // if -h or --help is encountered during the parse phase
 _help_requested: bool = false,
 
+// parent command
+_parent: ?*Command = null,
+
 // If command parameter is a group command you can set it to null in most of the cases.
-pub fn init(allocator: mem.Allocator, name: []const u8, runner: ?*const fn (self: *const Command, ctx: ?*anyopaque) anyerror!i32) Command {
-    return .{
+pub fn init(
+    allocator: mem.Allocator,
+    name: []const u8,
+    runner: ?*const fn (self: *const Command, ctx: ?*anyopaque) anyerror!i32,
+) *Command {
+    const cmd = allocator.create(Command) catch unreachable;
+    cmd.* = .{
         .allocator = allocator,
         .name = name,
         .runner = runner,
     };
+    return cmd;
 }
 
 pub fn deinit(self: *Command) void {
@@ -90,12 +100,13 @@ pub fn deinit(self: *Command) void {
         }
         args.deinit();
     }
-    if (self.commands) |commands| {
-        for (commands.items) |*command| {
+    if (self.subcommands) |commands| {
+        for (commands.items) |command| {
             command.deinit();
         }
         commands.deinit();
     }
+    self.allocator.destroy(self);
 }
 
 // command first checks if it's runner function is not null
@@ -111,8 +122,8 @@ pub fn run(self: *const Command, ctx: ?*anyopaque) anyerror!i32 {
     if (self.runner) |runner| {
         return runner(self, ctx);
     }
-    if (self.commands) |commands| {
-        for (commands.items) |*command| {
+    if (self.subcommands) |commands| {
+        for (commands.items) |command| {
             // from the list of sub commands only the active command can be run
             // there can be only one active command in the sub command list.
             if (command._active) return try command.run(ctx);
@@ -158,15 +169,15 @@ pub fn parse(self: *Command) !void {
 
 // Add subcommand to this command. Sub command names must be unique!
 pub fn addCommand(self: *Command, command: *Command) !void {
-    if (self.commands == null) {
-        self.commands = std.ArrayList(Command).init(self.allocator);
+    if (self.subcommands == null) {
+        self.subcommands = std.ArrayList(*Command).init(self.allocator);
     } else {
         if (self.findSubCommand(command.name) != null) {
             return error.CommandAlreadyExists;
         }
     }
     command._is_root = false;
-    try self.commands.?.append(command.*);
+    try self.subcommands.?.append(command);
 }
 
 // Add option to this command. Option names must be unique!
@@ -207,9 +218,9 @@ pub fn getOption(self: Command, name: []const u8) !*Option {
     return Error.OptionNotFound;
 }
 
-// Find the subcommand from this commands commands list.
+// Find the subcommand from this commands subcommands list.
 pub fn findSubCommand(self: *Command, name: []const u8) ?*Command {
-    if (self.commands) |subs| for (subs.items) |*s| if (mem.eql(u8, s.name, name)) return s;
+    if (self.subcommands) |subs| for (subs.items) |s| if (mem.eql(u8, s.name, name)) return s;
     return null;
 }
 
@@ -227,96 +238,72 @@ pub fn addArguments(self: *Command, arguments: []const Argument) !void {
     try self.arguments.?.appendSlice(arguments);
 }
 
-// Prints the help for this command
-pub fn printHelp(self: *Command) !void {
-    if (self.helpgen) |helpgen| {
-        const help = try helpgen(self.*);
-        defer self.allocator.free(help);
-        std.debug.print("{s}\n", .{help});
-        return;
-    }
-
-    var output = std.ArrayList(u8).init(self.allocator);
-    defer output.deinit();
-
-    try output.appendSlice("Usage: ");
-    try output.appendSlice(self.name);
-
-    if (self.arguments) |_| {
-        try output.appendSlice(" [arguments]");
-    }
-    if (self.options) |_| {
-        try output.appendSlice(" [options]");
-    }
-    if (self.commands) |_| {
-        try output.appendSlice(" [sub-commands]");
-    }
-
-    try output.appendSlice("\n");
-
-    if (self.commands) |commands| {
-        try output.appendSlice("\nSub commands:\n");
-        for (commands.items) |command| {
-            try output.appendSlice(" - ");
-            try output.appendSlice(command.name);
-            try output.appendSlice("\n");
-        }
-    }
-
-    if (self.arguments) |args| {
-        try output.writer().print("\nArguments:\n", .{});
-        for (args.items) |arg| {
-            var line = std.ArrayList(u8).init(self.allocator);
-            defer line.deinit();
-            try output.appendSlice(" - ");
-            try output.appendSlice(arg.name);
-            if (arg.description) |desc| {
-                if (line.items.len < 30) {
-                    try line.appendNTimes(' ', 30 - line.items.len);
-                } else {
-                    try line.appendNTimes(' ', 1);
-                }
-                try line.appendSlice(desc);
-            }
-            try output.writer().print("{s}\n", .{line.items});
-        }
-    }
-    if (self.options) |options| {
-        try output.writer().print("\nOptions:\n", .{});
-
-        for (options.items) |option| {
-            var line = std.ArrayList(u8).init(self.allocator);
-            defer line.deinit();
-
-            for (option.names.items, 0..) |name, i| {
-                if (name.len == 1) {
-                    try line.append('-');
-                } else {
-                    try line.appendSlice("--");
-                }
-                try line.appendSlice(name);
-                if (i != option.names.items.len - 1) try line.append(',');
-            }
-            if (option.description) |desc| {
-                if (line.items.len < 30) {
-                    try line.appendNTimes(' ', 30 - line.items.len);
-                } else {
-                    try line.appendNTimes(' ', 1);
-                }
-                try line.appendSlice(desc);
-            }
-            try output.writer().print("{s}\n", .{line.items});
-        }
-        if (self.examples) |examples| {
-            try output.writer().print("\nExamples:\n", .{});
-            for (examples) |example| {
-                try output.writer().print("{s}\n", .{example});
-            }
-        }
-    }
-    try output.writer().print("\n", .{});
-    std.debug.print("{s}", .{output.items});
+pub fn printHelp(self: *const Command) !void {
+    const help = Help.init(self.allocator, self);
+    try help.print();
 }
+
+// Prints the help for this command
+// pub fn printHelp(self: *Command) !void {
+//     if (self.helpgen) |helpgen| {
+//         const help = try helpgen(self.*);
+//         defer self.allocator.free(help);
+//         std.debug.print("{s}\n", .{help});
+//         return;
+//     }
+
+//     var output = std.ArrayList(u8).init(self.allocator);
+//     defer output.deinit();
+
+//     try output.appendSlice("Usage: ");
+//     try output.appendSlice(self.name);
+
+//     if (self.arguments) |_| {
+//         try output.appendSlice(" [arguments]");
+//     }
+//     if (self.options) |_| {
+//         try output.appendSlice(" [options]");
+//     }
+//     if (self.commands) |_| {
+//         try output.appendSlice(" [sub-commands]");
+//     }
+
+//     try output.appendSlice("\n");
+
+//     if (self.commands) |commands| {
+//         try output.appendSlice("\nSub commands:\n");
+//         for (commands.items) |command| {
+//             try output.appendSlice(" - ");
+//             try output.appendSlice(command.name);
+//             if (command.description) |desc| {
+//                 try output.appendSlice(" : ");
+//                 try output.appendSlice(desc);
+//             }
+//             try output.appendSlice("\n");
+//         }
+//     }
+
+//     if (self.arguments) |args| {
+//         try output.writer().print("\nArguments:\n", .{});
+//         for (args.items) |arg| {
+//             try argumentHelp(&output, arg);
+//         }
+//     }
+//     if (self.options) |options| {
+//         try output.writer().print("\nOptions:\n", .{});
+//         for (options.items) |option| {
+//             try optionHelp(&output, option);
+//         }
+//     }
+//     if (self.examples) |examples| {
+//         try output.writer().print("\nExamples:\n", .{});
+//         for (examples) |example| {
+//             try output.writer().print("{s}\n", .{example});
+//         }
+//     }
+//     try output.writer().print("\n", .{});
+//     std.debug.print("{s}", .{output.items});
+// }
 
 pub fn validate(self: Command) !void {
     if (self.arguments) |args| {
@@ -333,4 +320,27 @@ pub fn validate(self: Command) !void {
     }
 
     if (self.validation) |f| try f(self);
+}
+
+fn optionHelp(output: *std.ArrayList(u8), option: Option) !void {
+    for (option.names.items, 0..) |name, i| {
+        if (name.len == 1) {
+            try output.append('-');
+        } else {
+            try output.appendSlice("--");
+        }
+        try output.appendSlice(name);
+        if (i != option.names.items.len - 1) try output.append(',');
+    }
+    if (option.description) |desc| {
+        try output.writer().print("\n   {s}\n", .{desc});
+    }
+}
+fn argumentHelp(output: *std.ArrayList(u8), argument: Argument) !void {
+    try output.appendSlice(" - ");
+    try output.appendSlice(argument.name);
+    if (argument.description) |desc| {
+        try output.writer().print(": {s}\n", .{desc});
+    }
+    try output.appendSlice("\n");
 }

@@ -39,7 +39,7 @@ pub fn main() !void {
         }
     }.run);
 
-    try root.addCommand(&cmd);
+    try root.addCommand(cmd);
 
     // we allow unknown options here
     cmd.allow_unknown_options = true;
