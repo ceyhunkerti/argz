@@ -244,68 +244,6 @@ pub fn printHelp(self: *const Command) !void {
     try help.print();
 }
 
-// Prints the help for this command
-// pub fn printHelp(self: *Command) !void {
-//     if (self.helpgen) |helpgen| {
-//         const help = try helpgen(self.*);
-//         defer self.allocator.free(help);
-//         std.debug.print("{s}\n", .{help});
-//         return;
-//     }
-
-//     var output = std.ArrayList(u8).init(self.allocator);
-//     defer output.deinit();
-
-//     try output.appendSlice("Usage: ");
-//     try output.appendSlice(self.name);
-
-//     if (self.arguments) |_| {
-//         try output.appendSlice(" [arguments]");
-//     }
-//     if (self.options) |_| {
-//         try output.appendSlice(" [options]");
-//     }
-//     if (self.commands) |_| {
-//         try output.appendSlice(" [sub-commands]");
-//     }
-
-//     try output.appendSlice("\n");
-
-//     if (self.commands) |commands| {
-//         try output.appendSlice("\nSub commands:\n");
-//         for (commands.items) |command| {
-//             try output.appendSlice(" - ");
-//             try output.appendSlice(command.name);
-//             if (command.description) |desc| {
-//                 try output.appendSlice(" : ");
-//                 try output.appendSlice(desc);
-//             }
-//             try output.appendSlice("\n");
-//         }
-//     }
-
-//     if (self.arguments) |args| {
-//         try output.writer().print("\nArguments:\n", .{});
-//         for (args.items) |arg| {
-//             try argumentHelp(&output, arg);
-//         }
-//     }
-//     if (self.options) |options| {
-//         try output.writer().print("\nOptions:\n", .{});
-//         for (options.items) |option| {
-//             try optionHelp(&output, option);
-//         }
-//     }
-//     if (self.examples) |examples| {
-//         try output.writer().print("\nExamples:\n", .{});
-//         for (examples) |example| {
-//             try output.writer().print("{s}\n", .{example});
-//         }
-//     }
-//     try output.writer().print("\n", .{});
-//     std.debug.print("{s}", .{output.items});
-// }
-
 pub fn validate(self: Command) !void {
     if (self.arguments) |args| {
         for (args.items) |arg| {
