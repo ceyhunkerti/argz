@@ -63,7 +63,7 @@ fn usageHelp(self: Help, output: *std.ArrayList(u8)) !void {
     }
 
     if (self.command.options) |options| {
-        try output.appendSlice("\n\nOptions:\n");
+        try output.appendSlice("\nOptions:\n");
         for (options.items) |option| {
             if (option._is_unknown_option) continue;
             try output.appendSlice("  ");
