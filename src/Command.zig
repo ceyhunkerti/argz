@@ -177,6 +177,7 @@ pub fn addCommand(self: *Command, command: *Command) !void {
         }
     }
     command._is_root = false;
+    command._parent = self;
     try self.subcommands.?.append(command);
 }
 
