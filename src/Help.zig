@@ -68,7 +68,7 @@ fn usageHelp(self: Help, output: *std.ArrayList(u8)) !void {
             if (option._is_unknown_option) continue;
             try output.appendSlice("  ");
             for (option.names.items, 0..) |name, ni| {
-                if (ni > 0 and ni < option.names.items.len - 1) {
+                if (ni > 0 and ni <= option.names.items.len - 1) {
                     try output.append(',');
                 }
                 if (name.len == 1) {
